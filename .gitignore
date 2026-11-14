@@ -1,0 +1,45 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Copied out of node_modules by scripts/start.mjs — 34MB of build output.
+public/mediapipe/
+
+# Local Whisper model files (large; fetched separately).
+desktop/models/
+
+# Local configuration and secrets. Only the example is tracked.
+venom.config.json
+.env
+.env.*
+!.env.example
+
+# Generated output, backups and release builds.
+graphify-out/
+*.bak*
+release/
+desktop/build-info.json
+
+# The team list (npm run agents writes it). Only the example is tracked.
+venom.agents.json

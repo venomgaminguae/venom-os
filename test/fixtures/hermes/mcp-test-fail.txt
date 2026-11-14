@@ -1,0 +1,6 @@
+
+  Testing 'team'...
+  Transport: stdio → node
+  Auth: none
+  ✗ Connection failed (0.3s): missing executable 'node' (ensure Node.js is installed and PATH includes its bin directory, or set mcp_servers.<name>.command to an absolute path and include that directory in mcp_servers.<name>.env.PATH)
+  Install that command, or set mcp_servers.team.command in ~/AppData/Local/hermes/config.yaml to its full path.

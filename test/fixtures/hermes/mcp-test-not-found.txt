@@ -1,0 +1,2 @@
+  ✗ Server 'team' not found in config.
+  Available: docs

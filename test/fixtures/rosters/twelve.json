@@ -1,0 +1,82 @@
+{
+  "agents": [
+    {
+      "id": "researcher",
+      "name": "Researcher",
+      "kind": "specialist",
+      "role": "Web research: finds, compares and verifies information, products, prices, competitors and sources; replies with links.",
+      "pinned": true
+    },
+    {
+      "id": "coder",
+      "name": "Coder",
+      "kind": "specialist",
+      "role": "Software: writes, fixes, reviews and runs code and scripts, and verifies the result works.",
+      "pinned": true
+    },
+    {
+      "id": "operator",
+      "name": "Operator",
+      "kind": "specialist",
+      "role": "This Windows PC: files and folders, documents, spreadsheets, PDFs, installs and routine tasks."
+    },
+    {
+      "id": "writer",
+      "name": "Writer",
+      "kind": "specialist",
+      "role": "Writing: drafts emails, posts, product descriptions, documents and replies. Drafts only, never sends."
+    },
+    {
+      "id": "claude",
+      "name": "Claude Code",
+      "kind": "specialist",
+      "role": "Claude Code itself, with the owner's plugins, subagents and hooks: larger coding and review jobs that benefit from its planning workflows. Edits files and runs tests inside the projects folder; cannot push, deploy or delete folders. Each run is a Claude Code session the owner can open in the Claude app."
+    },
+    {
+      "id": "gemini",
+      "name": "Gemini",
+      "kind": "advisor",
+      "role": "Google's Gemini through Antigravity (the user's Google AI Pro plan): Google Search-grounded research, very long documents, and a second opinion from a different model family. Read-only: it can search and read files but cannot change anything."
+    },
+    {
+      "id": "analyst",
+      "name": "Analyst",
+      "kind": "specialist",
+      "role": "Data analysis: reads spreadsheets and CSV files, checks the numbers and reports the findings in a few lines. Read-only."
+    },
+    {
+      "id": "myapp",
+      "name": "MyApp",
+      "kind": "project",
+      "role": "MyApp, project lead for the myapp codebase: knows its code, build and release rules. Never pushes or deploys without the go-ahead.",
+      "folder": "myapp",
+      "profile": "my-app",
+      "pinned": true
+    },
+    {
+      "id": "designer",
+      "name": "Designer",
+      "kind": "specialist",
+      "role": "Visual design: mockups, colour and layout advice, image briefs."
+    },
+    {
+      "id": "support_desk",
+      "name": "Support Desk",
+      "kind": "specialist",
+      "role": "Customer questions: drafts answers from the help pages. Drafts only, never sends."
+    },
+    {
+      "id": "reviewer",
+      "name": "Reviewer",
+      "kind": "advisor",
+      "role": "A read-only second opinion on plans, code and documents."
+    },
+    {
+      "id": "planner",
+      "name": "Planner",
+      "kind": "specialist",
+      "role": "Plans and schedules: breaks a goal into steps with dates.",
+      "pinned": false
+    }
+  ]
+}

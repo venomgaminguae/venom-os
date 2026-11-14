@@ -1,0 +1,68 @@
+
+[36m┌─────────────────────────────────────────────────────────┐[0m
+[36m│                 🩺 Hermes Doctor                        │[0m
+[36m└─────────────────────────────────────────────────────────┘[0m
+
+[36m[1m◆ Security Advisories[0m
+  [32m✓[0m No active security advisories
+
+[36m[1m◆ Python Environment[0m
+  [32m✓[0m Python 3.11.9
+
+[36m[1m◆ SSL / CA Certificates[0m
+  [32m✓[0m TLS platform trust store configured; default SSL context available
+
+[36m[1m◆ Required Packages[0m
+  [32m✓[0m OpenAI SDK
+  [32m✓[0m Rich (terminal UI)
+  [32m✓[0m python-dotenv
+  [32m✓[0m ruamel.yaml
+  [32m✓[0m HTTPX
+  [32m✓[0m Croniter (cron expressions) [2m(optional)[0m
+  [33m⚠[0m python-telegram-bot [2m(optional, not installed)[0m
+  [33m⚠[0m discord.py [2m(optional, not installed)[0m
+  [33m⚠[0m Dashboard web surface [2m(optional web extra not installed)[0m
+
+[36m[1m◆ Configuration Files[0m
+  [32m✓[0m ~/AppData/Local/hermes/.env file exists
+  [33m⚠[0m No API key found in ~/AppData/Local/hermes/.env
+  [32m✓[0m ~/AppData/Local/hermes/config.yaml exists
+
+[36m[1m◆ Auth Providers[0m
+  [33m⚠[0m Nous Portal auth [2m(not logged in)[0m
+  [33m⚠[0m OpenAI Codex auth [2m(not logged in)[0m
+    [36m→[0m codex CLI not installed (optional — only required to import tokens from an existing Codex CLI login)
+  [33m⚠[0m MiniMax OAuth [2m(not logged in)[0m
+  [33m⚠[0m xAI OAuth [2m(not logged in)[0m
+
+[36m[1m◆ Directory Structure[0m
+  [32m✓[0m ~/AppData/Local/hermes directory exists
+
+[36m[1m◆ External Tools[0m
+  [32m✓[0m git
+  [33m⚠[0m ripgrep (rg) not found [2m(file search uses grep fallback)[0m
+    [36m→[0m Install for faster search: sudo apt install ripgrep
+  [32m✓[0m Node.js
+
+[36m[1m◆ API Connectivity[0m
+  [2mRunning 3 connectivity checks in parallel…[0m                                                                        [32m✓[0m IPv6 route [2m(no IPv6 route — IPv4 only)[0m
+  [33m⚠[0m OpenRouter API [2m(not configured)[0m
+
+[36m[1m◆ Tool Availability[0m
+  [33m⚠[0m web search [2m(no provider selected or registered)[0m
+  [33m⚠[0m web extract [2m(no provider selected or registered)[0m
+
+[36m[1m◆ Memory Provider[0m
+  [32m✓[0m Built-in memory active [2m(no external provider configured — this is fine)[0m
+
+[36m[1m◆ Profiles[0m
+  [32m✓[0m 1 profile(s) found
+
+[33m────────────────────────────────────────────────────────────[0m
+[33m[1m  Found 2 issue(s) to address:[0m
+
+  1. Run 'hermes setup' to configure API keys
+  2. Run 'hermes setup' to configure missing API keys for full tool access
+
+[2m  Tip: run 'hermes doctor --fix' to auto-fix what's possible.[0m
+

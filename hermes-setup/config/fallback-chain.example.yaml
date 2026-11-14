@@ -1,0 +1,41 @@
+# Fallback chain: tried in order when the brain model fails with a rate limit,
+# overload or connection error. Top-level key in each profile's config.yaml.
+# Docs: https://hermes-agent.nousresearch.com/docs/user-guide/features/fallback-providers
+#
+# No provider is assumed: any provider `hermes model` lists can be an entry.
+#
+# Easiest: `npm run setup` in the repository root offers to add one for the
+# supervisor profile (it runs `hermes -p <supervisor> fallback add`;
+# <supervisor> defaults to venom). Specialists created afterwards by the
+# setup script are cloned from the supervisor's config.yaml, so they should
+# start with the same chain; check with `hermes -p <profile> fallback list`.
+#
+# By hand, build it with the interactive picker, per profile, which also asks
+# for each provider's credentials:
+#
+#   hermes -p <profile> fallback add      # pick provider + model, appended to the chain
+#   hermes -p <profile> fallback list     # show the chain
+#   hermes -p <profile> fallback remove   # pick an entry to delete
+#   hermes -p <profile> fallback clear    # remove all entries
+#
+# The result in config.yaml looks like this. Every entry needs both
+# `provider` and `model`; entries missing either are ignored.
+
+fallback_providers:
+  - provider: <FALLBACK_PROVIDER_1>     # e.g. a second cloud provider you have an account with
+    model: <FALLBACK_MODEL_1>
+  - provider: <FALLBACK_PROVIDER_2>     # e.g. a local model server (see `providers:` below)
+    model: <FALLBACK_MODEL_2>
+
+# Optional: a user-defined local provider (an OpenAI-compatible server such as
+# Ollama), which a fallback entry can then name. Shape as Hermes writes it:
+#
+# providers:
+#   <LOCAL_PROVIDER_NAME>:
+#     name: <DISPLAY_NAME>
+#     api: http://localhost:<PORT>/v1
+#     transport: chat_completions
+#     default_model: <LOCAL_MODEL>
+#     models:
+#       <LOCAL_MODEL>:
+#         context_length: <CONTEXT_TOKENS>

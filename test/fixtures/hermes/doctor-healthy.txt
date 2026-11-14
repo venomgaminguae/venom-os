@@ -1,0 +1,59 @@
+
+┌─────────────────────────────────────────────────────────┐
+│                 🩺 Hermes Doctor                        │
+└─────────────────────────────────────────────────────────┘
+
+◆ Security Advisories
+  ✓ No active security advisories
+
+◆ Python Environment
+  ✓ Python 3.11.9
+
+◆ SSL / CA Certificates
+  ✓ TLS platform trust store configured; default SSL context available
+
+◆ Required Packages
+  ✓ OpenAI SDK
+  ✓ Rich (terminal UI)
+  ✓ python-dotenv
+  ✓ ruamel.yaml
+  ✓ HTTPX
+  ✓ Croniter (cron expressions) (optional)
+  ⚠ python-telegram-bot (optional, not installed)
+  ⚠ discord.py (optional, not installed)
+  ⚠ Dashboard web surface (optional web extra not installed)
+
+◆ Configuration Files
+  ✓ ~/AppData/Local/hermes/.env file exists
+  ✓ API key or custom endpoint configured
+  ✓ ~/AppData/Local/hermes/config.yaml exists
+
+◆ Auth Providers
+  ⚠ Nous Portal auth (not logged in)
+  ✓ OpenAI Codex auth (logged in)
+  ⚠ MiniMax OAuth (not logged in)
+  ⚠ xAI OAuth (not logged in)
+
+◆ Directory Structure
+  ✓ ~/AppData/Local/hermes directory exists
+
+◆ External Tools
+  ✓ git
+  ✓ ripgrep (rg) (faster file search)
+  ✓ Node.js
+
+◆ API Connectivity
+  Running 3 connectivity checks in parallel…                                                                        ✓ IPv6 route (no IPv6 route — IPv4 only)
+  ⚠ OpenRouter API (not configured)
+
+◆ Tool Availability
+
+◆ Memory Provider
+  ✓ Built-in memory active (no external provider configured — this is fine)
+
+◆ Profiles
+  ✓ 1 profile(s) found
+
+────────────────────────────────────────────────────────────
+  All checks passed! 🎉
+

@@ -1,0 +1,41 @@
+# Model settings for every team profile (<supervisor>, researcher, coder,
+# operator, writer). <supervisor> is your supervisor profile; the default is venom.
+#
+# The easy path is `npm run setup` in the repository root: you pick the
+# provider and model in Hermes's own picker and it sets all of this for you.
+# Nothing here assumes a provider; use the ids `hermes model` shows.
+#
+# These are the key names Hermes uses in each profile's config.yaml. Do not
+# paste this file over a config.yaml: set the values with the CLI instead, which
+# validates them (create-profiles.ps1 / create-profiles.sh do exactly this, from
+# their -BrainModel / --brain-model style parameters):
+#
+#   hermes -p <profile> config set model.default         <BRAIN_MODEL>
+#   hermes -p <profile> config set model.provider        <BRAIN_PROVIDER>
+#   hermes -p <profile> config set delegation.model      <WORKER_MODEL>
+#   hermes -p <profile> config set delegation.provider   <WORKER_PROVIDER>
+#   hermes -p <profile> config set delegation.oneshot_max_children 5
+#
+# Read a value back with:  hermes -p <profile> config get model.default
+# Credentials never go here. They live in the profile's .env / auth store and
+# are added with `hermes -p <profile> model` or `hermes -p <profile> setup`.
+
+# The "brain": the model each agent itself runs on. It plans, decides and
+# checks its workers' reports.
+model:
+  default: <BRAIN_MODEL>          # a model id your provider offers
+  provider: <BRAIN_PROVIDER>      # the provider name `hermes model` shows
+  # base_url and api_mode are written by `hermes model` for some providers.
+  # Leave them out unless your provider's docs say otherwise.
+  # base_url: <PROVIDER_BASE_URL>
+  # api_mode: <API_MODE>
+
+# The "workers": subagents each agent starts with delegate_task.
+delegation:
+  provider: <WORKER_PROVIDER>
+  model: <WORKER_MODEL>
+  max_iterations: 50              # tool-call budget per worker
+  oneshot_max_children: 5         # workers that may run in parallel
+
+# Optional, per run: hermes -p <profile> chat -q "..." -m <MODEL> --provider <PROVIDER>
+# overrides the brain for that one run only.

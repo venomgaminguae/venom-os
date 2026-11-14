@@ -1,0 +1,36 @@
+{
+  "agents": [
+    {
+      "id": "researcher",
+      "name": "Researcher",
+      "kind": "specialist",
+      "role": "Web research: finds, compares and verifies information, products, prices, competitors and sources; replies with links.",
+      "pinned": true
+    },
+    {
+      "id": "coder",
+      "name": "Coder",
+      "kind": "specialist",
+      "role": "Software: writes, fixes, reviews and runs code and scripts, and verifies the result works.",
+      "pinned": true
+    },
+    {
+      "id": "operator",
+      "name": "Operator",
+      "kind": "specialist",
+      "role": "This Windows PC: files and folders, documents, spreadsheets, PDFs, installs and routine tasks."
+    },
+    {
+      "id": "writer",
+      "name": "Writer",
+      "kind": "specialist",
+      "role": "Writing: drafts emails, posts, product descriptions, documents and replies. Drafts only, never sends."
+    },
+    {
+      "id": "analyst",
+      "name": "WRITER",
+      "kind": "specialist",
+      "role": "Data analysis: reads spreadsheets and CSV files, checks the numbers and reports the findings in a few lines. Read-only."
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+
+  MCP Servers:
+
+  Name             Transport                      Tools        Status    
+  ──────────────── ────────────────────────────── ──────────── ──────────
+  team             node C:/Users/you/venom-o...   all          ✓ enabled
+  docs             https://mcp.example.test/mcp   all          ✗ disabled
+

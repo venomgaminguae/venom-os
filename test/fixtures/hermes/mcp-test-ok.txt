@@ -1,0 +1,9 @@
+
+  Testing 'team'...
+  Transport: stdio → node
+  Auth: none
+  ✓ Connected (412ms)
+  ✓ Tools discovered: 1
+
+    ask_agent                            Hand a self-contained task to one of your Hermes specia...
+

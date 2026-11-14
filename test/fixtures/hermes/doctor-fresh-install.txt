@@ -1,0 +1,68 @@
+
+┌─────────────────────────────────────────────────────────┐
+│                 🩺 Hermes Doctor                        │
+└─────────────────────────────────────────────────────────┘
+
+◆ Security Advisories
+  ✓ No active security advisories
+
+◆ Python Environment
+  ✓ Python 3.11.9
+
+◆ SSL / CA Certificates
+  ✓ TLS platform trust store configured; default SSL context available
+
+◆ Required Packages
+  ✓ OpenAI SDK
+  ✓ Rich (terminal UI)
+  ✓ python-dotenv
+  ✓ ruamel.yaml
+  ✓ HTTPX
+  ✓ Croniter (cron expressions) (optional)
+  ⚠ python-telegram-bot (optional, not installed)
+  ⚠ discord.py (optional, not installed)
+  ⚠ Dashboard web surface (optional web extra not installed)
+
+◆ Configuration Files
+  ✓ ~/AppData/Local/hermes/.env file exists
+  ⚠ No API key found in ~/AppData/Local/hermes/.env
+  ✓ ~/AppData/Local/hermes/config.yaml exists
+
+◆ Auth Providers
+  ⚠ Nous Portal auth (not logged in)
+  ⚠ OpenAI Codex auth (not logged in)
+    → codex CLI not installed (optional — only required to import tokens from an existing Codex CLI login)
+  ⚠ MiniMax OAuth (not logged in)
+  ⚠ xAI OAuth (not logged in)
+
+◆ Directory Structure
+  ✓ ~/AppData/Local/hermes directory exists
+
+◆ External Tools
+  ✓ git
+  ⚠ ripgrep (rg) not found (file search uses grep fallback)
+    → Install for faster search: sudo apt install ripgrep
+  ✓ Node.js
+
+◆ API Connectivity
+  Running 3 connectivity checks in parallel…                                                                        ✓ IPv6 route (no IPv6 route — IPv4 only)
+  ⚠ OpenRouter API (not configured)
+
+◆ Tool Availability
+  ⚠ web search (no provider selected or registered)
+  ⚠ web extract (no provider selected or registered)
+
+◆ Memory Provider
+  ✓ Built-in memory active (no external provider configured — this is fine)
+
+◆ Profiles
+  ✓ 1 profile(s) found
+
+────────────────────────────────────────────────────────────
+  Found 2 issue(s) to address:
+
+  1. Run 'hermes setup' to configure API keys
+  2. Run 'hermes setup' to configure missing API keys for full tool access
+
+  Tip: run 'hermes doctor --fix' to auto-fix what's possible.
+

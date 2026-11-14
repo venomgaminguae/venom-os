@@ -1,0 +1,8 @@
+
+[36m[1m  MCP Servers:[0m
+
+  Name             Transport                      Tools        Status    
+  ──────────────── ────────────────────────────── ──────────── ──────────
+  team             node C:/Users/you/venom-o...   all          [32m✓ enabled[0m
+  docs             https://mcp.example.test/mcp   all          [2m✗ disabled[0m
+

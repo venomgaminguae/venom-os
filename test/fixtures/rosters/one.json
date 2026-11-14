@@ -1,0 +1,10 @@
+{
+  "agents": [
+    {
+      "id": "helper",
+      "name": "Helper",
+      "kind": "specialist",
+      "role": "General jobs: anything the owner asks that needs a computer."
+    }
+  ]
+}
