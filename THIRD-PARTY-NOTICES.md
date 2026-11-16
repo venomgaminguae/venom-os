@@ -86,3 +86,13 @@ node_modules content is committed.
    relied on its base model `openai/whisper-base.en` (Apache-2.0 on Hugging Face).
 5. **Audio files**: names and licence verified on incompetech.com; the MP3
    content itself was not compared against the originals.
+
+## 4. Bundled agent skills (`hermes-setup/skills/`)
+
+| Component | Path | What it is | Licence | Redistribution in a public MIT repo | Evidence |
+|---|---|---|---|---|---|
+| agent-skills (25 skills + references) | `hermes-setup/skills/agent-skills/` | Engineering-workflow skills by Addy Osmani, copied unmodified (line endings aside) from upstream commit `39b723ceebf81474d0557c1fecd01eddab585563`, fetched 2026-11-16 | MIT: "Copyright (c) 2025 Addy Osmani" | Yes, with the licence text (kept in `hermes-setup/skills/agent-skills/LICENSE`) | https://github.com/addyosmani/agent-skills ; https://raw.githubusercontent.com/addyosmani/agent-skills/main/LICENSE ; `hermes-setup/skills/agent-skills/SOURCE.md` |
+| graphify | not committed | Knowledge-graph tool (Python package `graphifyy`) whose installer writes its own skill | Apache-2.0 | Not redistributed; `hermes-setup/skills/README.md` points to the upstream install | https://github.com/Graphify-Labs/graphify (README and LICENSE on branch `v8`) |
+
+The other skills in `hermes-setup/skills/` were written for this project and
+are under its MIT licence.

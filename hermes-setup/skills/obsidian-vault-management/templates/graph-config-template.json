@@ -1,0 +1,18 @@
+{
+  "collapse-filter": false,
+  "search": "path:Vault",
+  "showTags": false,
+  "showAttachments": false,
+  "hideUnresolved": true,
+  "showOrphans": true,
+  "colorGroups": [
+    {
+      "query": "path:\"Vault/Graph/ProjectA\"",
+      "color": { "a": 1, "rgb": 16711680 }
+    },
+    {
+      "query": "path:\"Vault/Graph/ProjectB\"",
+      "color": { "a": 1, "rgb": 65280 }
+    }
+  ]
+}

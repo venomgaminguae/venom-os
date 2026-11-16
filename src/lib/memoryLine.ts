@@ -39,8 +39,8 @@ export function memoryLine(m: unknown): MemoryLine | null {
  * validated and cut to size; the strings are rendered as plain text.
  */
 
-export type SourceId = 'honcho' | 'notes' | 'skills' | 'vault' | 'graph' | 'log'
-export type SourceState = 'connected' | 'read-only' | 'offline' | 'not found' | 'off'
+export type SourceId = 'gbrain' | 'honcho' | 'notes' | 'skills' | 'vault' | 'graph' | 'log'
+export type SourceState = 'connected' | 'read-only' | 'offline' | 'not found' | 'off' | 'key refused'
 export type SourceLevel = 'ok' | 'warn' | 'bad' | 'quiet'
 export type MemoryRow = {
   id: SourceId
@@ -52,8 +52,10 @@ export type MemoryRow = {
 }
 export type MemorySummary = { text: string; level: SourceLevel }
 
-const IDS: readonly SourceId[] = ['honcho', 'notes', 'skills', 'vault', 'graph', 'log']
+// A payload holds gbrain or honcho (the one long-term slot), so six rows still come out.
+const IDS: readonly SourceId[] = ['gbrain', 'honcho', 'notes', 'skills', 'vault', 'graph', 'log']
 const LABELS: Record<SourceId, string> = {
+  gbrain: 'GBrain',
   honcho: 'Honcho',
   notes: 'Hermes notes',
   skills: 'Agent skills',
@@ -62,6 +64,7 @@ const LABELS: Record<SourceId, string> = {
   log: 'Conversation log',
 }
 const SHORT: Record<SourceId, string> = {
+  gbrain: 'GBrain',
   honcho: 'Honcho',
   notes: 'notes',
   skills: 'skills',
@@ -69,7 +72,7 @@ const SHORT: Record<SourceId, string> = {
   graph: 'graph',
   log: 'log',
 }
-const STATES: readonly SourceState[] = ['connected', 'read-only', 'offline', 'not found', 'off']
+const STATES: readonly SourceState[] = ['connected', 'read-only', 'offline', 'not found', 'off', 'key refused']
 const LEVELS: readonly SourceLevel[] = ['ok', 'warn', 'bad', 'quiet']
 const RANK: Record<SourceLevel, number> = { quiet: 0, ok: 1, warn: 2, bad: 3 }
 const MAX_DETAIL = 48

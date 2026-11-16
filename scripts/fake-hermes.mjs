@@ -30,6 +30,11 @@
 //                                   server is registered and FAKE_HERMES_MCP_TEST
 //                                   is not "fail" (then exit 1), exit 3 when it
 //                                   is not in the config
+//   gbrain over HTTP                once `config set mcp_servers.gbrain.url <url>`
+//                                   is done, `mcp list` shows a gbrain row and
+//                                   `mcp test gbrain` answers "Transport: HTTP → <url>"
+//   config path (no -p)             <FAKE_HERMES_STATE>/config.yaml, even when no
+//                                   profile named default exists
 //
 // chat extras:
 //   FAKE_HERMES_NEED_KEY=<NAME>     when profiles/<name>/.env exists, chat fails
@@ -133,6 +138,9 @@ if (cmd === '--version') {
     save(state)
     out(`Profile '${name}' deleted.`)
   } else fail(`fake-hermes: unknown profile command ${sub}`, 64)
+} else if (cmd === 'config' && sub === 'path' && !argv.includes('-p')) {
+  // Plain `config path`: the default home's config file, even with no profile named default.
+  out(join(DIR, 'config.yaml'))
 } else if (cmd === 'config') {
   const p = need(profile)
   if (sub === 'path') out(join(profileDir(profile), 'config.yaml'))
@@ -148,11 +156,15 @@ if (cmd === '--version') {
   } else fail(`fake-hermes: unknown config command ${sub}`, 64)
 } else if (cmd === 'mcp') {
   const p = need(profile)
+  // An HTTP server written with `config set mcp_servers.<name>.url` (how the
+  // GBrain stage connects a profile); only gbrain is recognised.
+  const httpUrl = (name) => (name === 'gbrain' ? p.config['mcp_servers.gbrain.url'] : undefined)
   if (sub === 'list') {
     // The real table (hermes_cli/mcp_config.py cmd_mcp_list), uncoloured as
     // through a pipe; FAKE_HERMES_MCP_DISABLED=<name> shows that row as off.
     const servers = Object.entries(p.mcp)
-    if (!servers.length) {
+    const gbrainUrl = httpUrl('gbrain')
+    if (!servers.length && !gbrainUrl) {
       for (const l of ['', '  No MCP servers configured.', '', '  Add one with:', '    hermes mcp add <name> --url <endpoint>', '    hermes mcp add <name> --command <cmd> --args <args...>', '']) out(l)
     } else {
       out('')
@@ -166,6 +178,7 @@ if (cmd === '--version') {
         const status = process.env.FAKE_HERMES_MCP_DISABLED === name ? '✗ disabled' : '✓ enabled'
         out(`  ${name.padEnd(16)} ${transport.padEnd(30)} ${'all'.padEnd(12)} ${status}`)
       }
+      if (gbrainUrl) out(`  ${'gbrain'.padEnd(16)} ${gbrainUrl.padEnd(30)} ${'all'.padEnd(12)} ✓ enabled`)
       out('')
     }
   } else if (sub === 'add') {
@@ -183,6 +196,21 @@ if (cmd === '--version') {
     // 3 not in the config. Everything goes to stdout, as Hermes prints it.
     const name = rest[0]
     const s = p.mcp[name]
+    const url = httpUrl(name)
+    if (!s && url) {
+      out('')
+      out(`  Testing '${name}'...`)
+      out(`  Transport: HTTP → ${url}`)
+      out('  Auth: header')
+      if (process.env.FAKE_HERMES_MCP_TEST === 'fail') {
+        out(`  ✗ Connection failed (0.3s): could not reach ${url}`)
+        process.exit(1)
+      }
+      out('  ✓ Connected (14ms)')
+      out('  ✓ Tools discovered: 3')
+      out('')
+      process.exit(0)
+    }
     if (!s) {
       out(`  ✗ Server '${name}' not found in config.`)
       if (Object.keys(p.mcp).length) out(`  Available: ${Object.keys(p.mcp).join(', ')}`)

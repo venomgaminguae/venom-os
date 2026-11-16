@@ -10,6 +10,16 @@
 //                     <scratch>/profile; implies --keep-profile and the folder is
 //                     NEVER deleted or emptied; app.log / bridge.log are read from
 //                     <dir>/logs. The JSON records dataSuppliedByCaller: true.
+//   --gbrain-read     the long-term memory check. VENOM_GBRAIN is left UNSET, so the
+//                     app's venom.config.json ("gbrain": true) decides, and the bridge
+//                     reads the real GBrain server on port 3131 with the real token
+//                     file (ping only). No turn can be made, so nothing is written:
+//                     the microphone is Chromium's fake device playing digital
+//                     silence, only steps a,b,c,d,i are allowed (no question is
+//                     asked), the brain is the fake CLI, and the run refuses to start
+//                     with a waiting GBrain outbox in the scratch memory folder.
+//                     Records the bridge's "long-term memory" lines and the HUD
+//                     memory line and rows (R); 05-memory.png.
 //   --page-port <n>   page port instead of 4198 (integer 1024-65535, not 5173,
 //                     8787, the bridge port or the CDP port); the expected origin
 //                     becomes http://localhost:<n>.
@@ -90,9 +100,16 @@ const STEP_NAMES = { a: 'start', b: 'gpu', c: 'bridge', d: 'initialise', e: 'spe
 const ONLY = new Set(String(arg('--only', Object.keys(STEP_NAMES).join(','))).split(',').map((s) => s.trim().toLowerCase()).filter(Boolean))
 for (const x of ONLY) if (!STEP_NAMES[x]) { console.error(`unknown step '${x}' in --only (steps: ${Object.keys(STEP_NAMES).join(',')})`); process.exit(2) }
 ONLY.add('a'); ONLY.add('i') // launch/attach and the clean-up always run
+const GBRAIN_READ = argv.includes('--gbrain-read')
+if (GBRAIN_READ) for (const x of ONLY) if (!'abcdi'.includes(x)) { console.error(`--gbrain-read allows steps a,b,c,d,i only (no question may be asked): '${x}' refused`); process.exit(2) }
 const EXE = DEV ? `${W}/node_modules/electron/dist/electron.exe` : fwd(arg('--exe', `${W}/release/Venom OS-win32-x64/Venom OS.exe`))
 const APP_ARGS = DEV ? [`${W}/desktop/main.mjs`] : []
+const SILENT_WAV = `${S}/gbrain-read-silence.wav`
 const CHROMIUM_ARGS = [`--remote-debugging-port=${PORT.cdp}`, '--mute-audio']
+// No real microphone in a run that can reach the real brain: nothing said in the room can become a turn.
+if (GBRAIN_READ) CHROMIUM_ARGS.push('--use-fake-device-for-media-stream', `--use-file-for-fake-audio-capture=${SILENT_WAV.replace(/\//g, '\\')}`)
+// The real token file, by path only: its text is never read here.
+const GBRAIN_TOKEN_FILE = path.join(os.homedir(), '.gbrain', 'tokens', 'venom-os.token')
 const PROFILE = DATA ?? `${S}/profile`
 const SHOTS = `${S}/shots`
 const PS_DIR = `${S}/ps`
@@ -106,7 +123,7 @@ const T0 = Date.now()
 const say = (...a) => console.log(`[${((Date.now() - T0) / 1000).toFixed(1)}s]`, ...a)
 const result = {
   started: new Date().toISOString(),
-  args: { dev: DEV, exe: EXE, appArgs: APP_ARGS, chromiumArgs: CHROMIUM_ARGS, scratch: S, out: OUT, only: [...ONLY].sort(), proofDist: PROOF_DIST, windowed: WINDOWED, keepProfile: KEEP_PROFILE, tray: TRAY, pagePort: PORT.page, origin: ORIGIN, data: PROFILE, dataSuppliedByCaller: Boolean(DATA) },
+  args: { dev: DEV, exe: EXE, appArgs: APP_ARGS, chromiumArgs: CHROMIUM_ARGS, scratch: S, out: OUT, only: [...ONLY].sort(), proofDist: PROOF_DIST, windowed: WINDOWED, keepProfile: KEEP_PROFILE, tray: TRAY, pagePort: PORT.page, origin: ORIGIN, data: PROFILE, dataSuppliedByCaller: Boolean(DATA), gbrainRead: GBRAIN_READ },
   env: null, steps: {}, screenshots: [], console: [], errors: [], aborted: null,
 }
 const save = () => { try { fs.mkdirSync(path.dirname(OUT), { recursive: true }); fs.writeFileSync(OUT, JSON.stringify(result, null, 2)) } catch (e) { console.error('could not save', OUT, e.message) } }
@@ -372,6 +389,7 @@ function attachHandlers(c) {
 const hfBytes = () => [...S_.net.values()].filter((r) => /huggingface\.co|hf\.co|xethub/i.test(r.url)).reduce((a, r) => a + (r.bytes || 0), 0)
 const mb = (b) => +(b / 1048576).toFixed(1)
 
+const ENV_FORBIDS_ASK = ['--use-fake-device-for-media-stream', '--use-file-for-fake-audio-capture=']
 function appEnv() {
   for (const d of ['home', 'memory', 'hermes-memory', 'workspace', 'agents']) fs.mkdirSync(`${S}/${d}`, { recursive: true })
   if (!fs.existsSync(`${S}/hermes-memory/MEMORY.md`)) fs.writeFileSync(`${S}/hermes-memory/MEMORY.md`, '')
@@ -398,8 +416,25 @@ function appEnv() {
     VENOM_MEMORY_DIR: `${S}/memory`,
     VENOM_HERMES_MEMORY_DIR: `${S}/hermes-memory`,
     VENOM_HONCHO: '0',
+    // Never reach the real GBrain server, even when the environment or venom.config.json switches it on.
+    VENOM_GBRAIN: '0',
     VENOM_STT_MODEL_DIR: `${W}/desktop/models`,
   })
+  if (GBRAIN_READ) {
+    if (!fs.existsSync(GBRAIN_TOKEN_FILE)) throw new Error('--gbrain-read: no GBrain token file for venom-os; refusing')
+    const box = `${S}/memory/outbox-gbrain.json`
+    if (fs.existsSync(box)) throw new Error(`--gbrain-read: ${box} exists; its turns would be sent to the real brain; refusing`)
+    if (ENV_FORBIDS_ASK.some((a) => !CHROMIUM_ARGS.some((x) => x.startsWith(a)))) throw new Error('--gbrain-read: fake microphone flags missing; refusing')
+    // 2 s of digital silence, 48 kHz mono PCM16: the page's detector never opens a segment.
+    const n = 48000 * 2 * 2
+    const h = Buffer.alloc(44)
+    h.write('RIFF', 0); h.writeUInt32LE(36 + n, 4); h.write('WAVEfmt ', 8); h.writeUInt32LE(16, 16); h.writeUInt16LE(1, 20); h.writeUInt16LE(1, 22)
+    h.writeUInt32LE(48000, 24); h.writeUInt32LE(96000, 28); h.writeUInt16LE(2, 32); h.writeUInt16LE(16, 34); h.write('data', 36); h.writeUInt32LE(n, 40)
+    fs.writeFileSync(SILENT_WAV, Buffer.concat([h, Buffer.alloc(n)]))
+    // Unset, not '1': the packaged app's venom.config.json must be what switches GBrain on.
+    for (const k of ['VENOM_GBRAIN', 'VENOM_GBRAIN_URL', 'VENOM_GBRAIN_START_CMD', 'VENOM_GBRAIN_HOLD_MS', 'VENOM_GBRAIN_TIMEOUT_MS', 'VENOM_GBRAIN_OWNER']) delete env[k]
+    env.VENOM_GBRAIN_TOKEN_FILE = GBRAIN_TOKEN_FILE // USERPROFILE is the scratch home, so the default path would miss it
+  }
   if (WINDOWED) env.VENOM_WINDOWED = '1'
   if (TRAY) env.VENOM_APP_TRAY_POPUP = '1'
   if (PROOF_DIST) env.VENOM_APP_DIST = PROOF_DIST
@@ -664,7 +699,43 @@ async function stepInitialise(r) {
   r.tts = await ev(S_.c, `(() => { const t = window.__tts; if (!t) return null; return { engine: t.engine, voice: t.voice, spoken: t.spoken, started: t.started, silent: t.silent, alarm: t.alarm, why: t.why, systemVoice: t.systemVoice } })()`)
   r.bridgeLogTts = bridgeTts(bridgeLogOffset)
   try { r.screenshot = await cdpShot(S_.c, '02-hud.png') } catch (e) { r.failures.push('screenshot: ' + e.message) }
+  if (GBRAIN_READ) await memoryCheck(r)
   await snapshot('after initialise')
+}
+
+/** --gbrain-read: what the bridge and the HUD say about long-term memory. Reads only. */
+async function memoryCheck(r) {
+  const m = r.memory = { gbrainEnvGiven: 'VENOM_GBRAIN' in ENV }
+  if (m.gbrainEnvGiven) r.failures.push('VENOM_GBRAIN was in the app environment: the default was not what was tested')
+  const logLines = () => readFrom(BRIDGE_LOG).split(/\r?\n/).filter((l) => l.includes('long-term memory')).map((l) => l.slice(l.indexOf('[venom]')))
+  await waitFor('bridge log: long-term memory reachable or not', async () => ({ ok: logLines().some((l) => /reachable/.test(l)), info: logLines().join(' | ') }), 15000).catch((e) => r.failures.push(e.message))
+  m.bridgeLog = logLines()
+  if (!m.bridgeLog.some((l) => /long-term memory: GBrain on/.test(l))) r.failures.push('bridge log has no "long-term memory: GBrain on"')
+  if (!m.bridgeLog.some((l) => /long-term memory: GBrain reachable/.test(l))) r.failures.push('bridge log has no "long-term memory: GBrain reachable"')
+  try {
+    const h = await getJson(`http://127.0.0.1:${PORT.bridge}/memory/sources`, { Origin: ORIGIN })
+    m.sourcesStatus = h.status
+    m.firstRow = (h.json?.rows ?? [])[0] ?? null
+    m.rowIds = (h.json?.rows ?? []).map((x) => x.id)
+  } catch (e) { r.failures.push('/memory/sources: ' + e.message) }
+  if (m.firstRow?.id !== 'gbrain') r.failures.push(`first memory source is ${m.firstRow?.id}, not gbrain`)
+  const read = () => ev(S_.c, `(() => { const q = document.querySelector('.memory-status'); return { line: q ? q.innerText.replace(/\\s+/g, ' ').trim() : null, cls: q ? q.className : null, rows: [...document.querySelectorAll('.memory-row')].map((x) => x.innerText.replace(/\\s+/g, ' ').trim()) } })()`)
+  await waitFor('HUD memory line names GBrain', async () => { const v = await read(); return { ok: /GBrain/.test(v.line ?? ''), info: JSON.stringify(v.line) } }, 20000).catch((e) => r.failures.push(e.message))
+  m.hudLine = await read()
+  const R = { key: 'r', code: 'KeyR', windowsVirtualKeyCode: 82, nativeVirtualKeyCode: 82 }
+  await S_.c.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...R })
+  await S_.c.send('Input.dispatchKeyEvent', { type: 'keyUp', ...R })
+  await waitFor('HUD memory rows', async () => { const v = await read(); return { ok: v.rows.length > 0, info: 'no .memory-row' } }, 5000).catch((e) => r.failures.push(e.message))
+  m.hudRows = await read()
+  m.gbrainRow = m.hudRows.rows.find((x) => /^GBrain/.test(x)) ?? null
+  if (!m.gbrainRow) r.failures.push('no HUD memory row starting with GBrain')
+  try { m.screenshot = await cdpShot(S_.c, '05-memory.png') } catch (e) { r.failures.push('screenshot: ' + e.message) }
+  // No question was asked and the microphone was silence: nothing may be waiting or logged.
+  m.outboxExists = fs.existsSync(`${S}/memory/outbox-gbrain.json`)
+  if (m.outboxExists) r.failures.push('a GBrain outbox appeared in the scratch memory folder')
+  say(`memory: ${m.bridgeLog.join(' | ')}`)
+  say(`memory HUD line: ${m.hudLine.line}`)
+  say(`memory HUD row: ${m.gbrainRow}`)
 }
 
 async function ask(text, timeout = 90000) {
@@ -969,6 +1040,8 @@ function summary() {
   line('i', `method ${q.method} exit ${q.closeToExitMs} ms code ${q.appExitCode}; closing stops everything: ${q.closingStopsEverything ? 'YES' : 'NO'}${q.leftover?.length ? ' left ' + JSON.stringify(q.leftover) : ''}${q.killed?.length ? ' killed ' + JSON.stringify(q.killed) : ''}`)
   L.push(`screenshots: ${result.screenshots.join(', ') || 'none'}`)
   L.push(`ports after: ${JSON.stringify(result.portsAfter)}; live 5173/8787 before ${JSON.stringify(result.liveBefore)} after ${JSON.stringify(result.liveAfter)}`)
+  const mem = st.d?.memory
+  if (mem) { L.push(`memory (--gbrain-read, VENOM_GBRAIN ${mem.gbrainEnvGiven ? 'GIVEN' : 'unset'}): ${(mem.bridgeLog ?? []).join(' | ')}`); L.push(`    HUD line: ${mem.hudLine?.line}`); L.push(`    HUD row: ${mem.gbrainRow}; /memory/sources first row ${JSON.stringify(mem.firstRow)}; outbox in scratch: ${mem.outboxExists}`) }
   if (result.realMemoryLeaks?.length) L.push(`REAL MEMORY LEAKS: ${result.realMemoryLeaks.join(', ')}`)
   if (result.errors.length) L.push('errors: ' + result.errors.map((x) => x.split('\n')[0]).join(' | '))
   L.push(`page console errors/warnings: ${result.console.length}`)

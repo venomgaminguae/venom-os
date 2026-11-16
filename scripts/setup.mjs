@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 // VENOM setup.
 //
-//   npm run setup                the "choose your brain" wizard (scripts/setup-lib.mjs):
-//                                checks prerequisites, lets you pick the model
-//                                provider in Hermes's own picker, creates the agent
-//                                team and saves the app settings in venom.config.json.
+//   npm run setup                the setup wizard (scripts/setup-lib.mjs), in seven
+//                                stages: checks this PC, Hermes, the main brain, the
+//                                key file, the agent team and app settings, the
+//                                bundled skills and the optional memory (GBrain).
+//                                Test switches: VENOM_SETUP_GBRAIN_PORT (GBrain's port).
 //   npm run setup -- --check     a read-only preflight: changes nothing, always exits 0.
 //   npm run setup -- --no-alias  the wizard, but Hermes creates no per-profile commands.
 //
@@ -14,12 +15,14 @@
 
 import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { NODE_MIN, firstSentence, nodeSupported, wizard } from './setup-lib.mjs';
+import { findBun, findGbrain } from './setup-gbrain.mjs';
+import { spawnPlan } from './spawn-plan.mjs';
 import { RosterError, loadRoster, rosterPath } from '../hermes-mcp/roster.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -135,6 +138,22 @@ function check() {
     line(warn, `Team: ${teamFile} cannot be used: ${firstSentence(first)}`);
   }
 
+  // --- Git, Bun and GBrain (found or not; nothing is run) --------------------
+  try {
+    const git = which('git');
+    if (git) line(tick, `Git found: ${git} (used to download updates of VENOM).`);
+    else line(info, 'Git not found. Setup does not need it; it is only used to download updates of VENOM.');
+    const find = { platform: process.platform, env: process.env, exists: (p) => existsSync(p), which, home: homedir() };
+    const bun = findBun(find);
+    const gbrain = findGbrain(find);
+    if (bun) line(tick, `Bun found: ${bun} (needed only to install GBrain).`);
+    else line(info, 'Bun not found. It is needed only to install GBrain; `npm run setup` can install it.');
+    if (gbrain) line(tick, `GBrain found: ${gbrain} (optional long-term memory).`);
+    else line(info, 'GBrain not found. It is the optional long-term memory; `npm run setup` offers to install it.');
+  } catch {
+    line(info, 'Could not check for Git, Bun and GBrain.');
+  }
+
   // --- How to run ----------------------------------------------------------
   console.log('');
   console.log('To run VENOM:');
@@ -168,10 +187,13 @@ function run(cmd, args, { interactive = false, env, showWindow = false } = {}) {
   return new Promise((resolve) => {
     let child;
     try {
-      child = spawn(cmd, args, {
+      // A .cmd program (Hermes can be one) has to go through cmd.exe.
+      const plan = spawnPlan(cmd, args);
+      child = spawn(plan.file, plan.args, {
         stdio: interactive ? 'inherit' : ['ignore', 'pipe', 'pipe'],
         env: env ?? process.env,
         windowsHide: !interactive && !showWindow,
+        ...plan.options,
       });
     } catch (e) {
       resolve({ code: -1, stdout: '', stderr: String(e?.message ?? e) });
@@ -209,6 +231,40 @@ async function fetchText(url) {
   return res.text();
 }
 
+// An installer's own output and questions go straight to the terminal.
+function runInherit(cmd, args, { env } = {}) {
+  return new Promise((resolve) => {
+    let child;
+    try {
+      const plan = spawnPlan(cmd, args);
+      child = spawn(plan.file, plan.args, { stdio: 'inherit', env: env ?? process.env, ...plan.options });
+    } catch {
+      resolve({ code: -1 });
+      return;
+    }
+    child.on('error', () => resolve({ code: -1 }));
+    child.on('close', (code) => resolve({ code: code ?? -1 }));
+  });
+}
+
+// A server that keeps running after setup ends (the GBrain start script).
+function startDetached(cmd, args, { env } = {}) {
+  const plan = spawnPlan(cmd, args);
+  const child = spawn(plan.file, plan.args, { detached: true, stdio: 'ignore', windowsHide: true, env: env ?? process.env, ...plan.options });
+  child.on('error', () => {});
+  child.unref();
+}
+
+// The HTTP status of a GET, or 0 on any error.
+async function fetchStatus(url, timeoutMs = 2000) {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+    return res.status;
+  } catch {
+    return 0;
+  }
+}
+
 // ------------------------------------------------------------- main
 
 const argv = process.argv.slice(2);
@@ -244,5 +300,11 @@ const code = await wizard({
   nowMs: () => Date.now(),
   randomHex: () => randomBytes(4).toString('hex'),
   homedir: homedir(),
+  home: homedir(),
+  runInherit,
+  startDetached,
+  fetchStatus,
+  sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  copyDir: (from, to) => cpSync(from, to, { recursive: true, errorOnExist: true, force: false }),
 });
 process.exit(code);

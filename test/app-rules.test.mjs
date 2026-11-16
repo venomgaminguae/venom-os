@@ -137,7 +137,7 @@ test('bridgeEnv refuses a missing port and skips undefined values', () => {
 
 // --------------------------------------------------------- pickModelDir --
 test('modelDirCandidates follows the documented order and skips missing inputs', () => {
-  const home = 'C:\\Users\\x'
+  const home = 'C:\\Home\\x'
   assert.deepEqual(
     modelDirCandidates({ env: { VENOM_STT_MODEL_DIR: 'E:\\m' }, homeDir: home, projectRoot: 'C:\\proj', appRoot: 'C:\\app' }),
     ['E:\\m', path.join(home, '.venom', 'models'), path.join('C:\\proj', 'desktop', 'models'), path.join('C:\\app', 'desktop', 'models')],
@@ -185,8 +185,8 @@ test('parsePort: fallback when empty, numbers accepted, junk refused', () => {
 
 // ------------------------------------------------------------- shortcut --
 test('shortcutPath is always <Desktop>\\Venom OS (app).lnk', () => {
-  assert.equal(shortcutPath('C:\\Users\\x\\Desktop'), 'C:\\Users\\x\\Desktop\\Venom OS (app).lnk')
-  assert.equal(shortcutPath('C:/Users/x/OneDrive/Desktop'), 'C:\\Users\\x\\OneDrive\\Desktop\\Venom OS (app).lnk')
+  assert.equal(shortcutPath('C:\\Home\\x\\Desktop'), 'C:\\Home\\x\\Desktop\\Venom OS (app).lnk')
+  assert.equal(shortcutPath('C:/Home/x/OneDrive/Desktop'), 'C:\\Home\\x\\OneDrive\\Desktop\\Venom OS (app).lnk')
   assert.throws(() => shortcutPath(''), /Desktop/)
 })
 
@@ -194,8 +194,8 @@ test('the shortcut guard refuses "Venom OS.lnk" and every other name', () => {
   assert.equal(assertShortcutName('C:\\D\\Venom OS (app).lnk'), 'C:\\D\\Venom OS (app).lnk')
   assert.equal(assertShortcutName('C:/D/Venom OS (app).lnk'), 'C:/D/Venom OS (app).lnk')
   for (const bad of [
-    'C:\\Users\\x\\Desktop\\Venom OS.lnk',
-    'C:/Users/x/Desktop/Venom OS.lnk',
+    'C:\\Home\\x\\Desktop\\Venom OS.lnk',
+    'C:/Home/x/Desktop/Venom OS.lnk',
     'Venom OS.lnk',
     'C:\\D\\venom os.lnk',
     'C:\\D\\venom os (app).lnk',

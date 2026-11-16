@@ -10,12 +10,25 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Q, TEST_QUESTION, SPECIALISTS, nodeSupported, redact, ollamaBase, probeLocal, wizard } from '../scripts/setup-lib.mjs'
 import { STARTER_AGENTS } from '../hermes-mcp/roster.mjs'
 import { LINK_TOKEN_PREFIX, Q_INSTALL, linkPrompt } from '../scripts/setup-hermes.mjs'
+import { Q_SKILLS } from '../scripts/setup-skills.mjs'
+import { Q_GBRAIN } from '../scripts/setup-gbrain.mjs'
+
+/** A port the OS says is free (the memory question is declined here, but GBrain's real port is never even named). */
+const PORT = await new Promise((resolve, reject) => {
+  const s = createServer()
+  s.on('error', reject)
+  s.listen(0, '127.0.0.1', () => {
+    const { port } = s.address()
+    s.close(() => resolve(port))
+  })
+})
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
 const KIT = join(ROOT, 'hermes-setup').replace(/\\/g, '/')
@@ -90,6 +103,9 @@ async function drive(w, { answers, picks = [], chat, fetchJson, env: envExtra = 
     FAKE_EDITOR_MODE: 'fill',
     FAKE_EDITOR_KEY: EDITOR_KEY,
     VENOM_ROSTER_FILE: join(w.dir, 'venom.agents.json'),
+    // GBrain: a temp home and a free port, so no test can reach the real ones.
+    GBRAIN_HOME: join(w.dir, 'gbrain-home'),
+    VENOM_SETUP_GBRAIN_PORT: String(PORT),
     ...envExtra,
   }
   const chromeWin = `${env.ProgramFiles.replace(/\\/g, '/')}/Google/Chrome/Application/chrome.exe`
@@ -183,6 +199,8 @@ const plainAnswers = (choice, sup) => [
   [/^Use a cheaper model for the workers\?/, ''],
   [Q.fallback, ''],
   [/^The voice app itself runs on Claude Code/, ''],
+  [Q_SKILLS, 'n'],
+  [Q_GBRAIN.install, 'n'],
 ]
 
 function assertTeam(w, sup, brain, worker) {
@@ -225,6 +243,7 @@ function assertAppConfig(w, family, brain, worker, sup, appModel = '') {
     worker,
     supervisorProfile: sup,
     appModel,
+    gbrain: false,
   })
 }
 
@@ -401,7 +420,7 @@ test('wizard: provider from another family asks before keeping it; N reopens the
       [Q.keep('anthropic', 'other-model'), 'n'],
       [/^Use a cheaper model/, ''],
       [Q.fallback, 'n'],
-      [/^The voice app itself/, 'test-app-model'],
+      [/^The voice app itself/, 'test-app-model'], [Q_SKILLS, 'n'], [Q_GBRAIN.install, 'n'],
     ],
     picks: ['anthropic/other-model', 'openai-api/test-gpt-model'],
   })
@@ -454,7 +473,7 @@ test('wizard: a failing test shows the real error, redacted, and can reopen the 
       [Q.retryPicker, ''],
       [/^Use a cheaper model/, ''],
       [Q.fallback, ''],
-      [/^The voice app itself/, ''],
+      [/^The voice app itself/, ''], [Q_SKILLS, 'n'], [Q_GBRAIN.install, 'n'],
     ],
     picks: ['openai-api/test-gpt-model', 'openai-api/test-gpt-model'],
     chat: (profile, args, n) =>
@@ -488,7 +507,7 @@ test('wizard: worker model is tested with -m; a failure can fall back to the bra
       [Q.retryWorker, 'y'],
       [Q.worker('test-claude-model'), 'test-cheap-model'],
       [Q.fallback, 'y'],
-      [/^The voice app itself/, ''],
+      [/^The voice app itself/, ''], [Q_SKILLS, 'n'], [Q_GBRAIN.install, 'n'],
     ],
     picks: ['anthropic/test-claude-model'],
     chat: (profile, args) => (args.includes('broken-worker') ? { code: 2, stdout: '', stderr: 'Error: model broken-worker not found' } : undefined),
@@ -521,7 +540,7 @@ test('wizard: worker failure with "n" keeps the brain model for the workers', { 
       [/^Use a cheaper model/, 'nope-model'],
       [Q.retryWorker, 'n'],
       [Q.fallback, 'n'],
-      [/^The voice app itself/, ''],
+      [/^The voice app itself/, ''], [Q_SKILLS, 'n'], [Q_GBRAIN.install, 'n'],
     ],
     picks: ['gemini/test-gemini-model'],
     chat: (profile, args) => (args.includes('nope-model') ? { code: 1, stdout: '', stderr: 'unknown model' } : undefined),

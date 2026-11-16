@@ -19,6 +19,19 @@ import { fileURLToPath } from 'node:url'
 import { Q, wizard } from '../scripts/setup-lib.mjs'
 import { Q as QA, addAgent, listAgents, removeAgent, roleLine } from '../scripts/agents-lib.mjs'
 import { ENV_Q_DONE } from '../scripts/setup-env.mjs'
+import { Q_SKILLS } from '../scripts/setup-skills.mjs'
+import { Q_GBRAIN } from '../scripts/setup-gbrain.mjs'
+import { createServer } from 'node:net'
+
+// A free port for GBrain (the memory question is declined here; the real port is never used).
+const GBRAIN_TEST_PORT = await new Promise((resolve, reject) => {
+  const s = createServer()
+  s.on('error', reject)
+  s.listen(0, '127.0.0.1', () => {
+    const { port } = s.address()
+    s.close(() => resolve(port))
+  })
+})
 import { BRIDGE_AGENTS, STARTER_AGENTS } from '../hermes-mcp/roster.mjs'
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
@@ -73,6 +86,8 @@ function session(w, envExtra = {}) {
     VENOM_AGENTS_DIR: w.agents,
     VENOM_ROSTER_FILE: w.roster,
     PROJECTS_ROOT: w.projects,
+    GBRAIN_HOME: join(w.dir, 'gbrain-home'),
+    VENOM_SETUP_GBRAIN_PORT: String(GBRAIN_TEST_PORT),
     ...envExtra,
   }
   for (const k of Object.keys(env)) if (env[k] === undefined) delete env[k]
@@ -165,7 +180,7 @@ const SKIP = { skip: !BASH && 'bash not found' }
 /** npm run setup in this world: Claude by subscription, the supervisor venom, then `team` answers. */
 const setup = (s, w, team) =>
   s.step('npm run setup', (d) => wizard({ ...d, nodeVersion: process.versions.node, repoRoot: w.repo, kitDir: KIT }), {
-    answers: [[Q.brain, '2'], [Q.access, '1'], [Q.supervisor, ''], ...team, [/^Use a cheaper model/, ''], [Q.fallback, ''], [Q.appModel, '']],
+    answers: [[Q.brain, '2'], [Q.access, '1'], [Q.supervisor, ''], ...team, [/^Use a cheaper model/, ''], [Q.fallback, ''], [Q.appModel, ''], [Q_SKILLS, 'n'], [Q_GBRAIN.install, 'n']],
     pick: ['anthropic/test-claude-model'],
   })
 const row = (r, id) => r.lines.find((l) => l.startsWith(`  ${id} `))?.trim().split(/\s{2,}/)
@@ -185,7 +200,7 @@ test('the journey: setup with coder and writer, add Analyst, list, remove it (pr
         ...STARTER_AGENTS.map((a) => [Q.agent(a), ['coder', 'writer'].includes(a.id) ? 'y' : 'n']),
         [/^Use a cheaper model/, ''],
         [Q.fallback, ''],
-        [Q.appModel, ''],
+        [Q.appModel, ''], [Q_SKILLS, 'n'], [Q_GBRAIN.install, 'n'],
       ],
       pick: ['anthropic/test-claude-model'],
     })

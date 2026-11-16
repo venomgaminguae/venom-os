@@ -23,6 +23,7 @@ import { chromeAvailable, chromeServer } from './chrome.mjs'
 import { visionServer } from './vision.mjs'
 import { amendLastTurn, logTurn, memoryConfig, memoryContext, memoryEnabled, memoryServer, pruneLog } from './memory.mjs'
 import { createHonchoProvider, honchoConfig } from './honcho.mjs'
+import { createGbrainProvider, ensureGbrainServer, gbrainConfig } from './gbrain.mjs'
 import { createLongMemory, disabledLongMemory, longMemoryServer } from './longmemory.mjs'
 import { memorySources } from './memorysources.mjs'
 import { cleanSpoken, interruptedAnswer, interruptNote, withNote } from './interruption.mjs'
@@ -41,7 +42,7 @@ import { isAbsolute, join, relative, resolve as resolvePath } from 'node:path'
 import { openRemote, proxyError, vetTarget, PROXY_UA } from './net.mjs'
 import { probeUrl, renderPage } from './page.mjs'
 import { loadOwner, ownerIntro, ownerSelf } from './owner.mjs'
-import { loadAppModel } from './settings.mjs'
+import { applyMemorySetting, loadAppModel } from './settings.mjs'
 import {
   builtinTools,
   checkToolUse,
@@ -545,15 +546,49 @@ const SYSTEM_PROMPT = [
 const MEMORY_ON = memoryEnabled()
 
 /**
- * Long-term memory, shared with Hermes's chat (see longmemory.mjs; the Honcho
- * part is honcho.mjs). Each finished spoken turn is also sent there in the
- * background, after the local log is written; nothing in a turn waits for it.
- * Off with VENOM_MEMORY=0, VENOM_HONCHO=0, or when there is no key.
- * VENOM_HONCHO_HOLD_MS shortens how long a turn waits for a late interrupt.
+ * Long-term memory (see longmemory.mjs). Each finished spoken turn is also
+ * sent there in the background, after the local log is written; nothing in a
+ * turn waits for it. Two services can fill it:
+ * - GBrain, a memory server on this PC (gbrain.mjs), chosen with
+ *   VENOM_GBRAIN=1 or "gbrain": true in venom.config.json (applyMemorySetting,
+ *   bridge/settings.mjs). It is off when there is no token file; it never falls
+ *   back to Honcho. VENOM_GBRAIN_HOLD_MS shortens the hold for tests.
+ * - Otherwise Honcho, shared with Hermes's chat (honcho.mjs). Off with
+ *   VENOM_HONCHO=0, or when there is no key.
+ * VENOM_MEMORY=0 turns both off. VENOM_HONCHO_HOLD_MS shortens how long a turn
+ * waits for a late interrupt.
  */
+// VENOM_GBRAIN from the environment, else "gbrain": true in venom.config.json
+// (bridge/settings.mjs). Silent: loadAppModel above already warned about a
+// broken file.
+applyMemorySetting()
+const GBRAIN_ON = process.env.VENOM_GBRAIN === '1'
+/** The GBrain settings when it is chosen, kept for the start-up code. */
+let gbrainCfg = null
 let longAbout = ''
 const LONG = (() => {
   if (!MEMORY_ON) return disabledLongMemory('VENOM_MEMORY=0')
+  if (GBRAIN_ON) {
+    try {
+      gbrainCfg = gbrainConfig()
+      if (!gbrainCfg.enabled) return disabledLongMemory(gbrainCfg.why)
+      const provider = createGbrainProvider(gbrainCfg)
+      try {
+        longAbout = provider.describe()
+      } catch {
+        /* only the banner uses it */
+      }
+      const hold = Number(process.env.VENOM_GBRAIN_HOLD_MS)
+      return createLongMemory({
+        provider,
+        dir: memoryConfig().logDir,
+        ...(hold > 0 ? { holdMs: hold } : {}),
+      })
+    } catch (err) {
+      console.error('[venom] long-term memory failed to start:', err?.message ?? err)
+      return disabledLongMemory('failed to start')
+    }
+  }
   try {
     const hc = honchoConfig()
     if (!hc.enabled) return disabledLongMemory(hc.why)
@@ -623,20 +658,42 @@ Long-term memory:
 - If it cannot be reached, say so in one short sentence and carry on.
 `
 
+const PROMPT_RECALL_GBRAIN = `
+
+Long-term memory:
+- What the owner says to you here by voice is kept in one long-term memory on
+  this PC (GBrain), which also holds facts that VENOM saved from the Hermes
+  chat. It does not hold every chat message. \`memory_recall\` searches it,
+  and what is known about him.
+- Use it when he refers to something earlier that \`memory_search\` does not
+  find, to a fact he asked the chat assistant to remember, or when he asks what
+  you know or remember about him. Never call it before an ordinary answer.
+- If it cannot be reached, say so in one short sentence and carry on.
+`
+
+/** What the recall tool says about itself when GBrain is the long-term memory. */
+const RECALL_TOOL_GBRAIN =
+  'Search the long-term memory kept on this PC: past voice conversations with you (Venom OS) and facts that VENOM saved from the Hermes chat, plus what is known about the owner. It does not hold every chat message. Use it when he refers to something from before that memory_search (spoken conversations on this PC) does not find, to a fact he asked the chat assistant to remember, or asks what you know or remember about him. Pass a short question or a few keywords. It takes a second or two: never call it for an ordinary question.'
+
+/** The line above the hits when GBrain is the long-term memory. */
+const RECALL_HEADING_GBRAIN = 'Found in long-term memory (voice conversations with Venom OS, and facts saved from the Hermes chat):'
+
 /** The long-term memory block, with its profile snapshot if there is one. */
 function recallPrompt() {
   if (!LONG.enabled) return ''
+  const gbrain = LONG.name === 'gbrain'
+  const block = gbrain ? PROMPT_RECALL_GBRAIN : PROMPT_RECALL
   let profile = ''
   try {
     profile = String(LONG.profileText() ?? '').trim()
   } catch {
     /* a fault leaves the snapshot out */
   }
-  if (!profile) return PROMPT_RECALL
-  return (
-    PROMPT_RECALL +
-    `\nWHAT LONG-TERM MEMORY SAYS ABOUT THE OWNER (shared with Hermes, may be out of date):\n${profile}\n`
-  )
+  if (!profile) return block
+  const heading = gbrain
+    ? 'WHAT LONG-TERM MEMORY SAYS ABOUT THE OWNER (may be out of date):'
+    : 'WHAT LONG-TERM MEMORY SAYS ABOUT THE OWNER (shared with Hermes, may be out of date):'
+  return block + `\n${heading}\n${profile}\n`
 }
 
 /** The full prompt for one new session: the persona, then memory as it is now. */
@@ -1379,6 +1436,14 @@ if (!LONG.enabled) {
   console.log(`[venom] long-term memory off (${longWhy()})`)
 } else {
   console.log(`[venom] long-term memory: ${LONG.label} on · ${longAbout}`)
+  // GBrain only: start its server if it is not running. Nothing waits for it.
+  if (GBRAIN_ON && gbrainCfg) {
+    void ensureGbrainServer(gbrainCfg)
+      .then((r) => {
+        if (r?.started) console.log('[venom] long-term memory: GBrain server was not running · started it in the background')
+      })
+      .catch(() => {})
+  }
   // Not awaited: the bridge serves at once, and turns queue until it answers.
   const notReachable = (why) =>
     console.log(`[venom] long-term memory: ${LONG.label} NOT reachable (${why}) · turns will wait and be sent later`)
@@ -1693,7 +1758,14 @@ wss.on('connection', (socket) => {
         // policy.mjs gates them the same way.
         ...(MEMORY_ON ? { venom_memory: memoryServer({ allowWrites: ALLOW_WRITES }) } : {}),
         // Recall from the long-term memory shared with Hermes. A read only.
-        ...(LONG.enabled ? { venom_recall: longMemoryServer(LONG) } : {}),
+        ...(LONG.enabled
+          ? {
+              venom_recall: longMemoryServer(
+                LONG,
+                LONG.name === 'gbrain' ? { description: RECALL_TOOL_GBRAIN, heading: RECALL_HEADING_GBRAIN } : {},
+              ),
+            }
+          : {}),
       },
       // A plain system prompt, not the claude_code preset. The preset is
       // tuned for a coding agent — verbose, file-oriented, and a large chunk

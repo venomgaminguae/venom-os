@@ -350,7 +350,8 @@ function appEnv() {
   Object.assign(env, {
     VENOM_APP_SILENT: '1', VENOM_APP_CAPTURE: '1', VENOM_WINDOWED: '1',
     VENOM_APP_DATA: PROFILE, VENOM_APP_PORT: String(PORT.page), VENOM_APP_BRIDGE_PORT: String(PORT.bridge), VENOM_APP_DIST: DIST,
-    VENOM_HONCHO: '0', VENOM_MEMORY: '1', VENOM_MEMORY_DIR: `${OUT}/memory`, VENOM_HERMES_MEMORY_DIR: `${OUT}/hermes-memory`,
+    // Never reach the real GBrain server, even when the environment or venom.config.json switches it on.
+    VENOM_HONCHO: '0', VENOM_GBRAIN: '0', VENOM_MEMORY: '1', VENOM_MEMORY_DIR: `${OUT}/memory`, VENOM_HERMES_MEMORY_DIR: `${OUT}/hermes-memory`,
     VENOM_AGENTS_DIR: `${OUT}/agents`, VENOM_AGENT_ACTIVITY: '0', VENOM_WORKSPACE: `${OUT}/workspace`,
     VENOM_DISABLE: 'browser,camera', ELEVENLABS_API_KEY: '', VENOM_STT_MODEL_DIR: `${fwd(LIVE_DIR)}/desktop/models`,
   })

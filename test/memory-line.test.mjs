@@ -184,3 +184,38 @@ test("memorySummary: 'not found' is not followed by its detail", () => {
   const rows = memoryRows({ rows: [{ id: 'vault', label: 'Obsidian vault', state: 'not found', level: 'warn', detail: 'no vault', updated: null }] }, Date.now())
   assert.equal(memorySummary(rows).text, 'memory · vault not found')
 })
+
+// --- GBrain in the long-term slot (VENOM_GBRAIN=1) ---------------------------
+
+const GB_NOW = Date.parse('2026-11-14T14:00:00.000Z')
+const rest = [
+  { id: 'notes', state: 'read-only', level: 'ok', detail: '21 entries' },
+  { id: 'skills', state: 'read-only', level: 'ok', detail: '5 skills' },
+]
+const gbrain = (state, level, detail) => ({ id: 'gbrain', label: 'GBrain', state, level, detail, updated: null })
+
+test('memoryRows: a gbrain row and the key refused state are accepted, gbrain first', () => {
+  const rows = memoryRows({ rows: [...rest, gbrain('key refused', 'warn', '2 waiting')] }, GB_NOW)
+  assert.deepEqual(rows.map((r) => r.id), ['gbrain', 'notes', 'skills'])
+  assert.equal(rows[0].label, 'GBrain')
+  assert.equal(rows[0].state, 'key refused')
+  assert.equal(rows[0].level, 'warn')
+  const unlabelled = memoryRows({ rows: [{ id: 'gbrain', state: 'connected', level: 'ok', detail: '1 sent' }] }, GB_NOW)
+  assert.equal(unlabelled[0].label, 'GBrain')
+  const six = memoryRows({ rows: ['gbrain', 'notes', 'skills', 'vault', 'graph', 'log'].map((id) => (
+    { id, state: 'connected', level: 'ok', detail: '1 sent' })) }, GB_NOW)
+  assert.equal(six.length, 6)
+  assert.deepEqual(six.map((r) => r.id), ['gbrain', 'notes', 'skills', 'vault', 'graph', 'log'])
+})
+
+test('memorySummary: the GBrain chip for each state', () => {
+  const sum = (row) => memorySummary(memoryRows({ rows: [row, ...rest] }, GB_NOW))
+  assert.deepEqual(sum(gbrain('connected', 'ok', '3 sent')), { text: 'memory · GBrain 3 sent · notes 21 · skills 5', level: 'ok' })
+  assert.equal(sum(gbrain('connected', 'ok', '3 sent · 1 waiting')).text, 'memory · GBrain 3 sent · notes 21 · skills 5')
+  assert.equal(sum(gbrain('connected', 'ok', 'no write tried yet')).text, 'memory · GBrain ok · notes 21 · skills 5')
+  assert.deepEqual(sum(gbrain('offline', 'warn', '2 waiting')), { text: 'memory · GBrain offline 2 waiting · notes 21 · skills 5', level: 'warn' })
+  assert.equal(sum(gbrain('key refused', 'warn', '2 waiting')).text, 'memory · GBrain key refused 2 waiting · notes 21 · skills 5')
+  assert.equal(sum(gbrain('key refused', 'warn', 'token not accepted')).text, 'memory · GBrain key refused · notes 21 · skills 5')
+  assert.equal(sum(gbrain('read-only', 'warn', '2 waiting · writes failing')).text, 'memory · GBrain read-only 2 waiting · notes 21 · skills 5')
+  assert.deepEqual(sum(gbrain('off', 'quiet', 'off')), { text: 'memory · GBrain off · notes 21 · skills 5', level: 'ok' })
+})

@@ -3,5 +3,6 @@
   "company": "Your Company",
   "city": "Your City",
   "appModel": "",
-  "supervisorProfile": "venom"
+  "supervisorProfile": "venom",
+  "gbrain": false
 }

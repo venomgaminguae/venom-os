@@ -15,7 +15,13 @@ import { memoryConfig } from './memory.mjs'
 
 export const SOURCE_IDS = ['honcho', 'notes', 'skills', 'vault', 'graph', 'log']
 
+/** The six ids for this switch: GBrain takes the long-term slot when VENOM_GBRAIN=1 (also set by "gbrain": true in venom.config.json). */
+export function sourceIds(env = process.env) {
+  return env?.VENOM_GBRAIN === '1' ? ['gbrain', ...SOURCE_IDS.slice(1)] : [...SOURCE_IDS]
+}
+
 const LABELS = {
+  gbrain: 'GBrain',
   honcho: 'Honcho',
   notes: 'Hermes notes',
   skills: 'Agent skills',
@@ -28,7 +34,7 @@ const CACHE_MS = 60_000
 const DETAIL_MAX = 48
 const SKILL_DEPTH = 5
 
-const STATES = new Set(['connected', 'read-only', 'offline', 'not found', 'off'])
+const STATES = new Set(['connected', 'read-only', 'offline', 'not found', 'off', 'key refused'])
 const LEVELS = new Set(['ok', 'warn', 'bad', 'quiet'])
 
 const count = (v) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Math.floor(Number(v)) : 0)
@@ -109,6 +115,44 @@ export async function honchoRow(long, { now = Date.now } = {}) {
     const s = Number(st.lastStatus)
     const why = s === 402 ? 'out of credits' : s === 401 || s === 403 ? 'key refused' : 'writes failing'
     return part('read-only', 'warn', `${queued} waiting · ${why}`, updated)
+  }
+  if (!sent && !queued) return part('connected', 'ok', 'no write tried yet', updated)
+  return part('connected', 'ok', `${sent} sent${queued > 0 ? ` · ${queued} waiting` : ''}`, updated)
+}
+
+// --- 1b. GBrain (the long-term slot when VENOM_GBRAIN=1) ---------------------
+
+/** A refused token: 401/403 on the last write, or the provider's fixed refusal words. */
+const keyRefused = (st) => {
+  const s = Number(st.lastStatus)
+  return s === 401 || s === 403 || (typeof st.lastError === 'string' && /refused the key/i.test(st.lastError))
+}
+
+/**
+ * The GBrain row. lastError is only tested for the refusal words, never
+ * copied into the row: every detail is built from numbers and fixed words.
+ */
+export async function gbrainRow(long, { now = Date.now } = {}) {
+  if (!long || long.enabled === false) return part('off', 'quiet', 'off')
+  const c = await cachedCheck(long, now)
+  let st = {}
+  try {
+    st = long.status?.() ?? {}
+  } catch {
+    st = {}
+  }
+  const queued = count(st.queued)
+  const sent = count(st.sent)
+  const updated = iso(st.lastOkAt)
+  const refused = keyRefused(st)
+  const waiting = `${queued} waiting`
+  if (!c.ok) {
+    if (refused) return part('key refused', 'warn', queued > 0 ? waiting : 'token not accepted', updated)
+    return part('offline', 'warn', queued > 0 ? waiting : 'not answering', updated)
+  }
+  if (st.writeFault === true) {
+    if (refused) return part('key refused', 'warn', waiting, updated)
+    return part('read-only', 'warn', `${waiting} · writes failing`, updated)
   }
   if (!sent && !queued) return part('connected', 'ok', 'no write tried yet', updated)
   return part('connected', 'ok', `${sent} sent${queued > 0 ? ` · ${queued} waiting` : ''}`, updated)
@@ -302,9 +346,10 @@ function finish(id, r) {
   return { id, label: LABELS[id], state, level, detail, updated }
 }
 
-/** GET /memory/sources: `{ at, rows }`, all six rows in order. Never throws. */
+/** GET /memory/sources: `{ at, rows }`, all six rows in order (gbrain or honcho first). Never throws. */
 export async function memorySources({ long, allowWrites = false, env = process.env, now = Date.now } = {}) {
   const checksFor = {
+    gbrain: () => gbrainRow(long, { now }),
     honcho: () => honchoRow(long, { now }),
     notes: () => notesRow({ allowWrites, env }),
     skills: () => skillsRow({ env, now }),
@@ -313,7 +358,7 @@ export async function memorySources({ long, allowWrites = false, env = process.e
     log: () => logRow({ env }),
   }
   const results = await Promise.all(
-    SOURCE_IDS.map(async (id) => {
+    sourceIds(env).map(async (id) => {
       try {
         return finish(id, await checksFor[id]())
       } catch {

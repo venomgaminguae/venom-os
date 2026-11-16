@@ -12,19 +12,19 @@ always runs on it) and access to an AI model for the agent team.
 git clone https://github.com/venomgaminguae/venom-os.git
 cd venom-os
 npm ci          # took under a minute on a fast connection
-npm run setup   # about ten questions; the Hermes download was not timed
+npm run setup   # seven stages; the Hermes download was not timed
 npm start       # then open the printed address in Chrome
 ```
 
-The wizard offers to install Hermes if missing and runs its health check, asks
-which brain (GPT, Claude, Gemini or a local model), a subscription sign-in or
-an API key (it opens the key file in Notepad) and a supervisor name, creates
-the supervisor and the starter agents you pick, runs a link test (add your own
-later with `npm run add-agent`). A sign-in uses your plan; API keys are billed
-per use, apart from any subscription. ChatGPT sign-in is available; Claude
-needs a Claude Max plan with purchased extra-usage credits (Claude Pro cannot:
-use a key); Gemini is API key only ([providers]). Tested against a stand-in
-for Hermes, not yet by a first real user. Everything else is reference, below.
+The wizard has seven stages, each safe to re-run: it checks this PC, offers to
+install Hermes and runs its health check, asks for the brain (GPT, Claude,
+Gemini or a local model), sign-in or API key and a supervisor name, opens the
+key file in Notepad (not for a sign-in), creates the agents you pick and runs a
+link test, offers the bundled skills, then asks about long-term memory (GBrain,
+optional). A sign-in uses your plan; API keys are billed per use. ChatGPT
+sign-in works; Claude needs a Max plan with purchased extra-usage credits (Pro:
+use a key); Gemini is API key only ([providers]). Tested against stand-ins,
+not yet by a first real user. Everything else is reference, below.
 
 Venom OS is a voice assistant (it calls itself VENOM) that runs in Google
 Chrome behind a holographic heads-up display built with Vite, React and
@@ -73,6 +73,20 @@ This is a personal project made public, not a finished product. Verified:
   exited by itself, and closing the window left no process. The `.exe`
   carries the placeholder icon, and the packaged bridge read the name, company
   and city from a `venom.config.json` placed in the clone before the build.
+- GBrain and the wizard, on one Windows 11 machine where GBrain 0.60.717.0
+  was already installed. A clean clone ran `npm run setup` twice in a real
+  terminal, with stand-ins for Hermes and the editor
+  (`scripts/fake-hermes.mjs` behind a `.cmd` file, `scripts/fake-editor.mjs`)
+  and the real GBrain on a fresh empty folder as its home and a spare port.
+  First run: all seven stages, exit code 0; stage 7 created the store with
+  `gbrain init --pglite --non-interactive --no-embedding`, saved the two
+  tokens, wrote the start script and started the server from it, and
+  `/health` answered 200. Second run: skills "already there", memory
+  "already set up and running", the token files unchanged. The app's own
+  GBrain client (`bridge/gbrain.mjs`) then pinged that server with the saved
+  token, and `scripts/gbrain-proof.mjs --write --bridge` passed against it:
+  a turn sent through a throwaway bridge (a stand-in for Claude Code, no
+  voice) was stored in GBrain and found again by search.
 
 ![The start screen of the desktop app: a ring with the word INITIALISE](docs/start-screen.png)
 
@@ -84,11 +98,18 @@ Not verified, or missing:
 - The `npm run setup` wizard has not been run against real provider accounts
   (OpenAI, Anthropic, Google) or a real Hermes installation. Its tests use a
   stub Hermes.
-- The new setup steps (offering to install Hermes, its health check, the
-  sign-in or API-key choice with the `.env` step, the link test) are covered
-  by unit tests against a stand-in Hermes and a stand-in editor
-  (`scripts/fake-hermes.mjs`, `scripts/fake-editor.mjs`). Neither the real
-  Hermes installer nor a real first-time setup has been run.
+- The seven-stage wizard has only met stand-ins for Hermes and the editor
+  (`scripts/fake-hermes.mjs`, `scripts/fake-editor.mjs`), in its unit tests
+  and in the two terminal runs above; `scripts/fake-gbrain.mjs` stands in
+  for GBrain in the unit tests. Neither the real Hermes installer nor a real
+  first-time setup has been run.
+- Not run: the Bun installer; `bun add -g github:garrytan/gbrain#stable` on a
+  PC without GBrain; the wizard against a real Hermes installation (install,
+  profiles, `config set` of the `gbrain` MCP entry, `mcp test`); the bundled
+  skills loaded by a real Hermes; GBrain on its usual port 3131 and its start
+  by the bridge; a spoken turn (microphone, voice, real Claude Code) stored
+  in GBrain and recalled; any of this on a second PC or by a first real
+  user.
 - The `hermes-setup/` scripts were tested end to end only against a stub
   Hermes (`scripts/fake-hermes.mjs`), not against a real Hermes installation.
 - Telegram goes through Hermes's own gateway and is not exercised here.
@@ -121,6 +142,9 @@ Features by test coverage (whether a test file in `test/` exists for it):
 | Control of your signed-in Chrome (`bridge/chrome.mjs`) | Implemented; only the WSL relay has a test, and it runs only under WSL |
 | `npm run setup` wizard (`scripts/setup-lib.mjs`) | Implemented, covered by unit tests with a stubbed Hermes for all four brain choices (`test/setup-brain.test.mjs`; the tests that run the profile script are skipped without PowerShell 7 on Windows, or bash elsewhere). Not run against real provider accounts or a real Hermes install |
 | `hermes-setup/` profile scripts | Implemented, tested end to end only against a stub Hermes (same test file) |
+| Setup stage 6, skills (`scripts/setup-skills.mjs`) | Implemented, covered by unit tests against stand-ins (`test/setup-skills.test.mjs`); not run against a real Hermes |
+| Setup stage 7, memory (`scripts/setup-gbrain.mjs`) | Implemented, covered by unit tests against stand-ins (`test/setup-gbrain.test.mjs`, `scripts/fake-gbrain.mjs`); run twice in a terminal with the real GBrain on a spare port (see Status); the Bun and GBrain installs and the connection to a real Hermes were not run |
+| GBrain long-term memory (`bridge/gbrain.mjs`, `bridge/settings.mjs`) | Implemented, covered by unit tests against a fake server (`test/gbrain.test.mjs`, `test/gbrain-bridge.test.mjs`); `scripts/gbrain-proof.mjs --write --bridge` passed once against a real GBrain (see Status); a spoken turn stored and recalled was not tried in this public copy |
 | Launchers (`Venom.cmd`, `Venom.vbs`, `venom-app.ps1`) | Implemented, not covered by tests |
 | Desktop app rules and page server (`desktop/app-rules.mjs`, `desktop/static-server.mjs`) | Implemented, covered by unit tests |
 | Desktop app shell and packaging (`desktop/main.mjs`, `scripts/build-app.mjs`) | Implemented, not covered by unit tests; built and started once from a clean clone (start screen only, see Status) |
@@ -133,7 +157,7 @@ Features by test coverage (whether a test file in `test/` exists for it):
   the build tools (Vite, oxlint) want 20.19 or newer, or 22.12 or newer, and
   the desktop app tools (Electron, `@electron/packager`) want 22.12 or newer.
   Only Node.js 24.14 with npm 11 has been tried.
-- Git, to clone.
+- Git, to clone this repository (the wizard checks for it).
 - Disk space, measured on a clean clone: about 1.1 GB after `npm ci` (plus
   about 400 MB in npm's own cache), and about 2.2 GB after
   `npm run app:build` (the built app folder is about 900 MB of that), plus
@@ -148,7 +172,7 @@ Features by test coverage (whether a test file in `test/` exists for it):
   setup wizard reports whether Claude Code is installed and signed in, and
   runs without it; the Hermes team runs without it when you use Hermes
   directly; the voice app, and so reaching the team by voice, does not.
-- Hermes Agent, for the agent team and for `npm run setup`. You need not
+- Hermes, for the agent team and for `npm run setup`. You need not
   install it first: if it is missing, the wizard shows the official install
   command and offers to run it. To install it by hand, see
   [hermes-setup/README.md](hermes-setup/README.md). The voice app alone runs
@@ -171,6 +195,10 @@ Features by test coverage (whether a test file in `test/` exists for it):
   - Hand tracking uses MediaPipe with the GPU delegate and retries on CPU if
     that fails.
 - Optional:
+  - Bun and GBrain, for long-term memory only. Stage 7 of `npm run setup`
+    asks before installing either (see
+    [Install and first run](#install-and-first-run)); without them Venom OS
+    runs with long-term memory off;
   - an ElevenLabs API key, for an ElevenLabs voice and ElevenLabs Scribe
     transcription;
   - the Claude Code CLI (`claude` agent) and the Google Antigravity CLI
@@ -194,39 +222,47 @@ npm reports a few known vulnerabilities in the dependencies when it finishes
 (`npm audit` lists them); they have not been reviewed here.
 
 For the agent team, run the wizard in a real terminal window (it refuses to
-run through a pipe). Hermes Agent need not be installed first: the wizard
+run through a pipe). Hermes need not be installed first: the wizard
 offers to install it.
 
 ```sh
 npm run setup
 ```
 
-`npm run setup` (`scripts/setup.mjs`, logic in `scripts/setup-lib.mjs`) is
-interactive. In order, it:
+`npm run setup` (`scripts/setup.mjs`, logic in `scripts/setup-lib.mjs`,
+`scripts/setup-skills.mjs` and `scripts/setup-gbrain.mjs`) is interactive. It
+runs seven stages in order, and each prints `Stage N of 7`. Every stage can be
+run again: a step that is already done is skipped with one line that says so.
+On a second run the supervisor question says "Profile <name> already exists.
+Update its model settings? (y/N)": answer `y` to go on with the same profile
+(Enter asks for another name).
 
-1. Checks for Node.js 22.12 or newer and Google Chrome. If Hermes Agent is
-   missing it shows the official install command (on Windows, in
-   PowerShell: `iex (irm https://hermes-agent.nousresearch.com/install.ps1)`;
-   guide:
-   https://hermes-agent.nousresearch.com/docs/getting-started/installation),
-   asks "Install Hermes now? (y/N)" and on yes runs it in the same window. A
-   fresh install may not be visible in that terminal: if the wizard cannot
-   find Hermes afterwards, it tells you to close the terminal, open a new one,
-   go back to the folder and run `npm run setup` again (safe to repeat).
-2. Runs Hermes's own health check, `hermes doctor`, and shows a pass, or the
-   failing points with the fix Hermes suggests, then asks "Go on with setup?
-   (y/N)". A model or key that is not set up yet is expected at this point.
-3. Asks "Which brain do you want? 1) OpenAI GPT  2) Anthropic Claude
-   3) Google Gemini  4) A local model on this PC (Ollama or LM Studio)".
-   Right after, it reports whether Claude Code is installed and signed in.
-   If you chose anything other than Claude, it says that the talking
-   interface still needs Claude Code and asks "Go on, or stop here? (Y/n)".
-   For a local model it asks Ollama (`OLLAMA_HOST`, default
+1. **Checking this PC.** Looks for Node.js 22.12 or newer, Git, Google
+   Chrome, Claude Code (and whether it is signed in), and PowerShell 7 or
+   bash. For long-term memory it also looks for Bun and GBrain. Only a
+   missing Node.js or Chrome stops it here; a missing Hermes goes on to
+   stage 2, and everything else is a note (Bun and GBrain: stage 7).
+2. **Hermes.** If Hermes is missing it shows the official install command (on
+   Windows, in PowerShell:
+   `iex (irm https://hermes-agent.nousresearch.com/install.ps1)`; guide:
+   [Hermes installation][hermes-install]), asks "Install Hermes now? (y/N)"
+   and on yes runs it in the same window. A fresh install may not be visible
+   in that terminal: if the wizard cannot find Hermes afterwards, it tells you
+   to close the terminal, open a new one, go back to the folder and run
+   `npm run setup` again (safe to repeat). Then it runs Hermes's own health
+   check, `hermes doctor`, and shows a pass, or the failing points with the
+   fix Hermes suggests, then asks "Go on with setup? (y/N)". A model or key
+   that is not set up yet is expected at this point.
+3. **The main brain.** Asks "Which brain do you want? 1) OpenAI GPT
+   2) Anthropic Claude  3) Google Gemini  4) A local model on this PC (Ollama
+   or LM Studio)". If you chose anything other than Claude, it says that the
+   talking interface still needs Claude Code and asks "Go on, or stop here?
+   (Y/n)". For a local model it asks Ollama (`OLLAMA_HOST`, default
    `http://localhost:11434`) and LM Studio (`http://localhost:1234`) which
    models are installed, lists them (with size where Ollama reports it), and
    warns that small models (roughly under 14B parameters or about 8 GB) are
    weak at tool use. If neither server answers it stops.
-4. For GPT and Claude it says what each way means and what Hermes supports
+   For GPT and Claude it says what each way means and what Hermes supports
    for that provider, then asks "How do you want to connect? 1) Sign in with
    my subscription  2) Paste an API key". A subscription sign-in uses your
    plan; an API key is billed per use by the provider, separately from any
@@ -237,61 +273,112 @@ interactive. In order, it:
    https://platform.openai.com/api-keys,
    https://console.anthropic.com/settings/keys and
    https://aistudio.google.com/apikey.
-5. Asks "Name for the supervisor profile [venom]:". An existing profile is
-   updated only if you say so. Then it asks about each of the four starter
+   Then it asks "Name for the supervisor profile [venom]:" (an existing
+   profile is updated only if you say so) and about each of the four starter
    agents, one by one ("Researcher (...). Add it? (Y/n)"; Enter means yes,
    and you need at least one). If Claude Code or Antigravity is installed it
    also asks "Also add Claude Code as an agent (...)? (y/N)" (and the same
    for Gemini; Enter means no). On a later run it asks "Keep it on the team?
-   (Y/n)" for agents already on the team, and agents you added yourself stay.
-6. Sign-in route: opens Hermes's own model picker,
-   `hermes -p <supervisor> model`, and you sign in there.
+   (Y/n)" for agents already on the team, and agents you added yourself
+   stay. The supervisor profile is created at the end of this stage.
+4. **Your key.** Sign-in route: there is no key file; Hermes's own model
+   picker opens, `hermes -p <supervisor> model`, and you sign in there.
    API-key route: finds the variable name Hermes expects for that provider
    (from the installed Hermes's own provider list, else Hermes's
    documentation, else a built-in name, and says which), makes a dated backup
    of the supervisor profile's `.env` beside it, adds an empty `NAME=` line
    with a one-line instruction above it, and opens the file in Notepad
    (elsewhere `$VISUAL`, `$EDITOR`, nano or vi; `VENOM_SETUP_EDITOR` chooses
-   another editor). You type the key after the `=`, save and close. Back in
-   the wizard it checks, without printing the key, that the line is filled
-   and has no quotes or spaces, and that no other line was lost: lines an
-   editor dropped are put back from the backup and named. Then Hermes's
-   picker opens so you pick the model.
+   another editor), then waits. You type the key after the `=`, save and
+   close. Back in the wizard it checks, without printing the key, that the
+   line is filled and has no quotes or spaces, and that no other line was
+   lost: lines an editor dropped are put back from the backup and named. Then
+   Hermes's picker opens so you pick the model.
    Either way the wizard reads back the provider and model and asks before
-   keeping one from a different family.
-7. Asks the model "Reply with the single word READY." and shows a pass or the
-   real error (key-shaped text is masked), with the offer to open the file or
-   the picker again.
-8. Asks "Use a cheaper model for the workers? Type a model id from the same
-   provider, or press Enter to use <MODEL_ID>:" (the brain's model) and tests
-   a model id you type. Then asks "Add a fallback model for when the brain
-   fails? (y/N)"; yes opens `hermes -p <supervisor> fallback add`. Then
+   keeping one from a different family. It then asks the model "Reply with
+   the single word READY." and shows a pass or the real error (key-shaped
+   text is masked), with the offer to open the file or the picker again.
+5. **Venom OS and the team.** Asks "Use a cheaper model for the workers?
+   Type a model id from
+   the same provider, or press Enter to use <MODEL_ID>:" (the brain's model)
+   and tests a model id you type, and "Add a fallback model for when the
+   brain fails? (y/N)"; yes opens `hermes -p <supervisor> fallback add`. It
    creates or updates the Hermes profiles (the supervisor plus the starter
-   agents you chose) with
-   `hermes-setup/create-profiles.ps1` (PowerShell 7) or
-   `hermes-setup/create-profiles.sh` (bash), saves the team in
-   `venom.agents.json`, and asks each agent the
-   same test question. Account sign-ins are stored per profile and are not
-   copied, so a failing agent gets its own fix command
-   (`hermes -p <name> model`).
-9. Runs a link test: through Hermes it asks the supervisor to hand one agent
-   a one-line task through the team connector. It passes only if the agent's
-   reply comes back and the run is recorded in the team activity log
+   agents you chose) with `hermes-setup/create-profiles.ps1` (PowerShell 7)
+   or `hermes-setup/create-profiles.sh` (bash), saves the team in
+   `venom.agents.json`, and asks each agent the same test question. Account
+   sign-ins are stored per profile and are not copied, so a failing agent
+   gets its own fix command (`hermes -p <name> model`).
+   Then the link test: through Hermes it asks the supervisor to hand one
+   agent a one-line task through the team connector. It passes only if the
+   agent's reply comes back and the run is recorded in the team activity log
    (`~/.venom/agents`). It prints `[link OK]` with the reply, or
    `[link FAILED]` with the real error and one fix command.
-10. Asks "The voice app itself runs on Claude Code (see README). Claude model
-    id for the voice app, or press Enter to use your Claude Code default:",
-    writes `brain`, `worker`, `supervisorProfile` and `appModel` into
-    `venom.config.json`, keeping any other keys there, and prints a summary.
-    It ends with three steps: how to start, what you should see (the
-    INITIALISE ring), and the three commands that change the team
-    (`npm run add-agent`, `npm run agents`, `npm run remove-agent`).
+   Last, it asks "The voice app itself runs on Claude Code (see README).
+   Claude model id for the voice app, or press Enter to use your Claude Code
+   default:" and writes `brain`, `worker`, `supervisorProfile` and `appModel`
+   into `venom.config.json`, keeping any other keys there.
+6. **Skills.** Lists the skills bundled in `hermes-setup/skills/` (eight
+   written for this project, and the [agent-skills] pack by Addy Osmani: 25
+   skills, MIT licence, unmodified from upstream) and asks "Install these
+   skills into your Hermes profiles? (Y/n)". On yes it copies each skill
+   folder into the `skills` folder of every Hermes profile it set up (found
+   with `hermes -p <profile> config path`). A skill folder that is already
+   there is never overwritten, and links are never followed. Hermes's own
+   bundled skills are not repeated. graphify (Apache-2.0,
+   [Graphify-Labs/graphify][graphify]) is not shipped: install it yourself
+   with `uv tool install graphifyy` (or `pipx install graphifyy`), then
+   `graphify install --platform hermes`. See
+   [hermes-setup/skills/README.md](hermes-setup/skills/README.md).
+7. **Memory (GBrain).** Asks first: "Install long-term memory (GBrain)?
+   (Y/n)". GBrain is a memory server by Garry Tan, under the MIT licence
+   ([gbrain]), that runs only on this PC. Saying no leaves `"gbrain": false`
+   in `venom.config.json`: Venom OS then works with long-term memory off, and
+   the local conversation log and notes still work. On yes it does each step
+   that is not done yet:
+   - Bun, which is needed to install GBrain: asks "Install Bun now? (y/N)"
+     and runs Bun's official installer ([bun]; on Windows
+     `powershell -c "irm bun.sh/install.ps1 | iex"`, elsewhere
+     `curl -fsSL https://bun.sh/install | bash`).
+   - GBrain: asks "Install GBrain now? (y/N)" and runs
+     `bun add -g github:garrytan/gbrain#stable`.
+   - The store: creates an empty one with
+     `gbrain init --pglite --non-interactive --no-embedding` in `~/.gbrain`.
+     An existing store holds your memory: it is kept and never initialised
+     again.
+   - Two access tokens, made with `gbrain auth create`:
+     `~/.gbrain/tokens/venom-os.token` for the app and `hermes.token` beside
+     it for Hermes. They are never shown on screen.
+   - Writes `~/.gbrain/start-gbrain-server.cmd` (a `.sh` script elsewhere),
+     which runs `gbrain serve --http --port 3131` with its log in
+     `~/.gbrain/serve-http.log`, starts it and waits up to 30 seconds for an
+     answer.
+   - Connects each Hermes profile to it as the MCP server `gbrain`
+     (`http://127.0.0.1:3131/mcp`). The token goes into the profile's `.env`
+     as `MCP_GBRAIN_API_KEY`, and the profile's config holds only the
+     placeholder `Bearer ${MCP_GBRAIN_API_KEY}` (written with
+     `hermes -p <profile> config set`, because `hermes mcp add` asks for the
+     token at a prompt). Then it tests the connection with
+     `hermes -p <supervisor> mcp test gbrain`. A problem with Hermes here is
+     only a note: the app reads GBrain directly.
+   - Sets `"gbrain": true` in `venom.config.json`.
+
+   No embeddings key is set up, so GBrain's search is keyword search until
+   you add one in GBrain yourself. `GBRAIN_HOME` (the folder that holds
+   `.gbrain`), `BUN_EXE` and `GBRAIN_EXE` point the stage elsewhere.
+
+At the end the wizard prints a summary, one line per stage with what it did
+or skipped, and three steps: how to start, what you should see (the
+INITIALISE ring), and the three commands that change the team
+(`npm run add-agent`, `npm run agents`, `npm run remove-agent`).
 
 On the API-key route the key is typed into the supervisor profile's own
 `.env` file (the specialists are cloned from it, so the key is copied into
 their profiles' `.env` files too). The wizard never prints, logs, copies or
-sends the key itself. `HERMES_EXE` points the wizard at a Hermes that is not
-on the PATH or in `%LOCALAPPDATA%\hermes\bin`.
+sends the key itself. The GBrain tokens are handled the same way: written
+to their files and the profiles' `.env` files, never shown. `HERMES_EXE`
+points the wizard at a Hermes that is not on the PATH or in
+`%LOCALAPPDATA%\hermes\bin`.
 
 It is safe to run again. `npm run setup -- --check` is the read-only
 preflight instead: it changes nothing and always exits 0. It looks for
@@ -311,10 +398,11 @@ Optional configuration (both files are git-ignored):
   `company`, `city`). Environment variables `VENOM_OWNER_NAME`,
   `VENOM_COMPANY` and `VENOM_CITY` take priority. With neither, VENOM uses
   neutral wording ("the owner"). The wizard adds `brain` and `worker`
-  (provider and model of the team), `supervisorProfile` and `appModel`. The
-  voice app reads only `appModel` of these (see
-  [Voice app: Claude Code through the bridge](#voice-app-claude-code-through-the-bridge));
-  the others record what setup chose.
+  (provider and model of the team), `supervisorProfile`, `appModel` and
+  `gbrain` (`true` or `false`, stage 7). The voice app reads `appModel` (see
+  [Voice app: Claude Code through the bridge](#voice-app-claude-code-through-the-bridge))
+  and `gbrain` (see [Memory](#memory); `VENOM_GBRAIN` in the environment wins
+  over it); the others record what setup chose.
 
 Three ways to start it:
 
@@ -423,9 +511,9 @@ How it behaves:
   [Security notes](#security-notes) first). `VENOM_MCP_SERVERS` is set to
   `hermes,context7,firecrawl,sequential-thinking` unless you define it.
 - Settings: the build copies your `venom.config.json`, if there is one, into
-  the app, so the name, company, city and `appModel` from `npm run setup`
-  apply. Environment variables still take priority. No model is named
-  otherwise: Claude Code uses its own default.
+  the app, so the name, company, city, `appModel` and `gbrain` from
+  `npm run setup` apply. Environment variables still take priority. No model
+  is named otherwise: Claude Code uses its own default.
 - Window: full screen. F11 leaves and re-enters; Esc stays "stand down".
   `VENOM_WINDOWED=1` gives a 1400x850 window.
 - Tray icon: Show, Stand down, Start with Windows (off until you tick it; it
@@ -500,7 +588,7 @@ no default model) exists, but that key ships to the browser.
 
 Optional for the voice app. `hermes-mcp/server.mjs` is a stdio MCP server with
 one tool, `ask_agent(agent, task)`, used only when an MCP server named exactly
-`hermes` in `~/.claude.json` points at it. Hermes Agent (open source, by Nous
+`hermes` in `~/.claude.json` points at it. Hermes (open source, by Nous
 Research) is not included; `npm run setup` creates the profiles, and the setup
 kit is [hermes-setup/README.md](hermes-setup/README.md). The wizard also
 registers the same server as `team` on the supervisor profile, so the
@@ -614,6 +702,54 @@ no key, with `VENOM_HONCHO=0` or with `VENOM_MEMORY=0`. Covered by unit tests ag
 copy it has never been run against the real service
 (`node scripts/honcho-proof.mjs` does that with your own key).
 
+**Long-term memory on this PC (GBrain).** Off unless you said yes in stage 7
+of `npm run setup` (`"gbrain": true` in `venom.config.json`) or set
+`VENOM_GBRAIN=1`; `VENOM_GBRAIN=0` keeps it off whatever the file says
+(`applyMemorySetting` in `bridge/settings.mjs`). When it is on, GBrain takes
+the long-term place instead of Honcho and never falls back to it: without a
+token file long-term memory is off. GBrain ([gbrain]) is a memory server on
+this PC (`gbrain serve --http`, `http://127.0.0.1:3131` by default), shared
+with the Hermes agents, with no account and no fee. Each finished spoken
+exchange (the same two texts as above, after the local log is written, held
+up to 90 seconds for a late interruption) is stored as one page
+`venom-os/YYYY-MM-DD/tHHMMSS-<hash>` with the GBrain tool `capture`. The page
+name comes from the time and the two texts, so a retry after a timeout never
+stores a turn twice. `memory_recall` searches it with the GBrain tool
+`recall` (keyword search, as the store is set up without embeddings) and
+reads your own card with `entity` (the page named by `VENOM_GBRAIN_OWNER`).
+No such card yet is normal: the profile block is then left out. It holds past
+voice conversations with Venom OS and facts saved from the Hermes chat, not
+every chat message; the prompt and the tool description say so. The token is
+read at start from a file outside the project and is never logged or sent
+anywhere but this PC; an address that is not on this PC is refused. Nothing
+in a turn waits for it: saves happen after the answer, and recall only inside
+`memory_recall`, with a time limit per call. When the server is down the app
+starts and answers as usual; turns wait in
+`~/.venom/memory/outbox-gbrain.json` (at most 200) and are sent later. On
+Windows, when `/health` does not answer at start, the bridge runs the start
+script once, hidden, and does not wait for it. It is also off with
+`VENOM_MEMORY=0`. Covered by unit tests against a fake server, and proved once
+against a real GBrain with `scripts/gbrain-proof.mjs` (see [Status](#status));
+a spoken turn stored and recalled has not been tried in this public copy.
+
+| Variable | Default | Effect |
+|---|---|---|
+| `VENOM_GBRAIN` | unset (then `"gbrain"` in `venom.config.json` decides) | `1` uses GBrain, `0` never |
+| `VENOM_GBRAIN_URL` | `http://127.0.0.1:3131` | The GBrain server; must be on this PC |
+| `VENOM_GBRAIN_TOKEN_FILE` | `~/.gbrain/tokens/venom-os.token` | The file the token is read from (first line) |
+| `VENOM_GBRAIN_OWNER` | `owner` | The name of your card in GBrain |
+| `VENOM_GBRAIN_START_CMD` | `~/.gbrain/start-gbrain-server.cmd` | Run once at start (Windows) when the server does not answer |
+| `VENOM_GBRAIN_TIMEOUT_MS` | `3000` | How long one call to GBrain may take |
+| `VENOM_GBRAIN_HOLD_MS` | 90 seconds | How long a finished turn waits for a late interruption before it is sent |
+
+To check it by hand: `node scripts/gbrain-proof.mjs` (read only), with
+`--write` (stores one marked exchange; refused on the real server without
+`--real-brain`) or `--bridge` (a whole turn through a throwaway bridge; only
+against a test server). To copy earlier turns from the local log:
+`node scripts/gbrain-import.mjs` (a dry run: counts and a report of what it
+would skip), then the same with `--write`. It never changes its source files,
+and a second run stores nothing new.
+
 **The memory section on the HUD.** Under the mic line, one line sums up every
 memory source, for example `memory · Honcho 4 sent · notes 5 · skills 12 ·
 vault not found · graph not found · log 9 · R details`. **R** opens one row
@@ -626,6 +762,7 @@ error message is ever sent.
 | Row | What is checked | States |
 |---|---|---|
 | Honcho | a live ping (at most one a minute) and the result of the last write | `connected`, `read-only` (answers, but writes are refused: out of credits or key refused; shows how many turns wait), `offline`, `off` |
+| GBrain (instead of Honcho, when it is on) | `/health` and the token (at most one check a minute) and the result of the last write | `connected`, `key refused` (the token is not accepted; shows how many turns wait), `offline` (not answering; shows how many wait), `read-only` (answers, but writes fail), `off` |
 | Hermes notes | `MEMORY.md` and `USER.md`: entries counted | `connected` with `--writes`, else `read-only`; `not found` |
 | Agent skills | `SKILL.md` files under Hermes's `skills` folder and each profile's | `read-only`, `not found` |
 | Obsidian vault | the notes beside `Home.md` in `VENOM_VAULT_DIR` (no default: unset means `not found`) | `read-only`, `not found` |
@@ -633,8 +770,9 @@ error message is ever sent.
 | Conversation log | turns in `~/.venom/memory/conversations` | `connected`, `off` |
 
 `connected` means the bridge reads and writes it now; `read-only` means it is
-found and readable and the app does not (or cannot) write it. Only Honcho's
-`read-only` is a fault (amber). The skills are counted under
+found and readable and the app does not (or cannot) write it. Honcho's
+`read-only` and GBrain's `offline`, `key refused` and `read-only` are faults
+(amber). The skills are counted under
 `VENOM_HERMES_ROOT`, by default the Hermes root derived from `HERMES_HOME` (a
 profile's home points two levels up), else `%LOCALAPPDATA%\hermes`. A bridge
 older than this shows the old single Honcho line.
@@ -821,6 +959,18 @@ Claude CLI (`scripts/fake-cli.mjs`); no test opens a real agent session. The
 setup wizard tests use a fake Hermes (`scripts/fake-hermes.mjs`) instead of a
 real one.
 
+The GBrain tests use a fake GBrain on a random loopback port. The real
+server is on loopback too, so under `node --test` the GBrain layer is off
+unless the address is given explicitly and is not port 3131, and the token
+file is given explicitly and is not the real one. The setup tests run
+`scripts/fake-gbrain.mjs` in place of `gbrain`, with temp home folders.
+`scripts/app-proof.mjs` and `scripts/turn-proof.mjs` set `VENOM_GBRAIN=0`.
+The one exception is `app-proof.mjs --gbrain-read`: it leaves the variable
+unset so the app's `venom.config.json` decides, lets the bridge ping the real
+server with the real token file, and makes a turn impossible (a fake
+microphone playing silence, no question asked, the fake brain), so nothing is
+written. It has not been run from this public copy.
+
 Proof scripts (not in `npm test`; Chrome at its default Windows path; they
 never use ports 5173 or 8787):
 
@@ -860,7 +1010,15 @@ MIT, see [LICENSE](LICENSE).
   weights are Apache-2.0 and downloaded, not committed, and a few items (the
   MediaPipe hand model, eSpeak NG inside phonemizer) have unconfirmed
   licences.
-- Claude Code (Anthropic), Hermes Agent (Nous Research) and Google Antigravity
-  are separate projects and are not included here.
+- Claude Code (Anthropic), Hermes (Nous Research), Google Antigravity, GBrain
+  (Garry Tan, MIT) and Bun are separate projects and are not included here.
+- `hermes-setup/skills/agent-skills/` is Addy Osmani's [agent-skills] pack
+  (MIT), copied unmodified with its licence; see section 4 of
+  [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 [providers]: https://hermes-agent.nousresearch.com/docs/integrations/providers
+[hermes-install]: https://hermes-agent.nousresearch.com/docs/getting-started/installation
+[gbrain]: https://github.com/garrytan/gbrain
+[bun]: https://bun.sh/docs/installation
+[agent-skills]: https://github.com/addyosmani/agent-skills
+[graphify]: https://github.com/Graphify-Labs/graphify

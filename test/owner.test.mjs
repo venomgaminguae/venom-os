@@ -77,7 +77,7 @@ test('persona lines: neutral without a company, the company and city when set', 
 test('the example config parses and has the keys loadOwner reads, plus the setup keys', () => {
   const text = readFileSync(new URL('../venom.config.example.json', import.meta.url), 'utf8')
   const data = JSON.parse(text)
-  assert.deepEqual(Object.keys(data).sort(), ['appModel', 'city', 'company', 'ownerName', 'supervisorProfile'])
+  assert.deepEqual(Object.keys(data).sort(), ['appModel', 'city', 'company', 'gbrain', 'ownerName', 'supervisorProfile'])
   const { ownerName, company, city } = data
   assert.deepEqual(loadOwner({ env: {}, readFile: fileWith(text) }), { ownerName, company, city })
 })

@@ -4,7 +4,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { cleanModelId, loadAppModel, MODEL_ID, SETTINGS_FILE } from '../bridge/settings.mjs'
+import { applyMemorySetting, cleanModelId, loadAppModel, MODEL_ID, SETTINGS_FILE } from '../bridge/settings.mjs'
 
 const noFile = () => {
   throw Object.assign(new Error('ENOENT: no such file'), { code: 'ENOENT' })
@@ -68,6 +68,44 @@ test('values: non-strings and whitespace are not set; trimmed otherwise', () => 
   assert.equal(loadAppModel({ env: {}, readFile: fileWith({ appModel: null }) }), '')
   assert.equal(loadAppModel({ env: {}, readFile: fileWith({ appModel: ' \t\n ' }) }), '')
   assert.equal(loadAppModel({ env: {}, readFile: fileWith({ appModel: '  m-2  ' }) }), 'm-2')
+})
+
+test('memory setting: "gbrain": true in the file switches GBrain on when VENOM_GBRAIN is unset', () => {
+  const env = {}
+  assert.equal(applyMemorySetting({ env, readFile: fileWith({ gbrain: true }) }), 'config')
+  assert.equal(env.VENOM_GBRAIN, '1')
+  let asked = ''
+  applyMemorySetting({ env: {}, file: 'x/venom.config.json', readFile: (p) => ((asked = p), '{}') })
+  assert.equal(asked, 'x/venom.config.json')
+})
+
+test('memory setting: a test run never follows the file (the person may have GBrain on)', () => {
+  const env = { NODE_TEST_CONTEXT: 'child-v8' }
+  const read = () => assert.fail('the file must not be read during a test run')
+  assert.equal(applyMemorySetting({ env, readFile: read }), 'off')
+  assert.ok(!('VENOM_GBRAIN' in env))
+  const chosen = { NODE_TEST_CONTEXT: 'child-v8', VENOM_GBRAIN: '1' }
+  assert.equal(applyMemorySetting({ env: chosen, readFile: read }), 'env')
+})
+
+test('memory setting: false, missing, a string or no file leave VENOM_GBRAIN unset', () => {
+  for (const data of [{ gbrain: false }, {}, { gbrain: 'true' }, { gbrain: 1 }, { gbrain: null }, '{ not json', '[1]']) {
+    const env = {}
+    assert.equal(applyMemorySetting({ env, readFile: fileWith(data) }), 'off', JSON.stringify(data))
+    assert.ok(!('VENOM_GBRAIN' in env), JSON.stringify(data))
+  }
+  const env = {}
+  assert.equal(applyMemorySetting({ env, readFile: noFile }), 'off')
+  assert.deepEqual(env, {})
+})
+
+test('memory setting: any VENOM_GBRAIN in the environment wins, even blank or 0', () => {
+  for (const v of ['0', '', '1', 'yes']) {
+    const env = { VENOM_GBRAIN: v }
+    const read = () => assert.fail('the file must not be read')
+    assert.equal(applyMemorySetting({ env, readFile: read }), 'env')
+    assert.equal(env.VENOM_GBRAIN, v)
+  }
 })
 
 test('sanitising: only model-id shaped values pass, with a warning that does not echo the value', () => {

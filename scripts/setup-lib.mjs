@@ -22,6 +22,28 @@ import {
   tidyEnvValue,
 } from './setup-env.mjs'
 import { BRIDGE_AGENTS, BRIDGE_IDS, RosterError, STARTER_AGENTS, loadRoster, rosterPath, saveRoster } from '../hermes-mcp/roster.mjs'
+import { skillsStage } from './setup-skills.mjs'
+import { GBRAIN_PORT, gbrainPaths, gbrainPrereq, gbrainStage } from './setup-gbrain.mjs'
+
+/** The seven stages, in order, as the headings name them. */
+export const STAGES = [
+  'Checking this PC',
+  'Hermes',
+  'The main brain',
+  'Your key',
+  'Venom OS and the team',
+  'Skills',
+  'Memory (GBrain)',
+]
+
+/** The heading printed before stage n (1-based). */
+export const stageTitle = (n) => `Stage ${n} of ${STAGES.length}: ${STAGES[n - 1]}`
+
+/** The GBrain port: VENOM_SETUP_GBRAIN_PORT when it is a valid port number (tests), else GBRAIN_PORT. */
+export function gbrainPort(env = {}) {
+  const n = Number(String(env.VENOM_SETUP_GBRAIN_PORT ?? '').trim())
+  return Number.isInteger(n) && n > 0 && n < 65536 ? n : GBRAIN_PORT
+}
 
 /** The ids of the four starter agents, in their usual order. */
 export const SPECIALISTS = STARTER_AGENTS.map((a) => a.id)
@@ -244,6 +266,24 @@ export function findHermes({ platform, env, exists, which }) {
   return ''
 }
 
+/**
+ * The shell that runs the hermes-setup script: PowerShell 7 (pwsh) or Git's
+ * bash on Windows, bash elsewhere. Returns { cmd, kind, label } or null.
+ */
+export function findShell({ platform, env = {}, exists, which }) {
+  if (platform === 'win32') {
+    const pwsh = which('pwsh')
+    if (pwsh) return { cmd: pwsh, kind: 'ps1', label: 'PowerShell 7' }
+    const gitBash = [env.ProgramFiles, env['ProgramW6432']]
+      .filter(Boolean)
+      .map((r) => `${slash(r)}/Git/bin/bash.exe`)
+      .find((p) => exists(p))
+    return gitBash ? { cmd: gitBash, kind: 'sh', label: 'bash (Git)' } : null
+  }
+  const bash = which('bash')
+  return bash ? { cmd: bash, kind: 'sh', label: 'bash' } : null
+}
+
 /** Ollama's base URL from OLLAMA_HOST (which may lack a scheme or a port), else the default. */
 export function ollamaBase(env) {
   let host = String(env.OLLAMA_HOST ?? '').trim()
@@ -442,21 +482,43 @@ export async function wizard(deps) {
   const shown = (p) => shownPath(p, deps.platform)
   const io = { readFile: deps.readFile, writeFile: deps.writeFile }
 
-  say('', 'Venom OS setup: choose the brain for your Hermes agent team.', '')
+  // What each stage ended as, for the summary at the end.
+  const stageStatus = {}
+  const heading = (n) => say('', stageTitle(n), '-'.repeat(stageTitle(n).length))
 
-  // (a) Prerequisites
+  say('', 'Venom OS setup, in seven stages. Running it again is safe: what is already done is skipped.')
+
+  // (a) Stage 1: prerequisites. Only Node.js, Google Chrome and (when something
+  // else is missing too) Hermes stop setup here; everything else is a note.
+  heading(1)
   const missing = []
   if (!nodeSupported(deps.nodeVersion)) {
-    missing.push([`Node.js ${NODE_MIN} or newer (found ${deps.nodeVersion || 'none'})`, `Install it from ${LINKS.node}`])
+    missing.push([
+      `Node.js ${NODE_MIN} or newer (found ${deps.nodeVersion || 'none'})`,
+      'Needed for: this setup and Venom OS itself.',
+      `Install it from ${LINKS.node}`,
+    ])
   } else say(`[ok] Node.js ${deps.nodeVersion}`)
   const chrome = findChrome({ ...deps, env })
-  if (!chrome) missing.push(['Google Chrome', `Install it from ${LINKS.chrome}`])
+  if (!chrome) missing.push(['Google Chrome', 'Needed for: the voice app, which runs in Google Chrome.', `Install it from ${LINKS.chrome}`])
   else say(`[ok] Google Chrome: ${shown(chrome)}`)
+  const claude = await claudeStatus({ run, which: deps.which })
+  say(claudeLine(claude))
+  const shellFound = findShell({ ...deps, env })
+  say(
+    shellFound
+      ? `[ok] ${shellFound.label}: ${shown(shellFound.cmd)}`
+      : '[note] Neither PowerShell 7 (pwsh) nor bash was found: stage 5 needs one of them to create the agent team.',
+  )
+  const git = deps.which('git')
+  say(git ? `[ok] Git: ${shown(git)}` : '[note] Git is not installed. Setup does not need it; it is only used to download updates of Venom OS.')
+  const home = deps.home ?? deps.homedir
+  gbrainPrereq({ platform: deps.platform, env, exists: deps.exists, which: deps.which, home }).lines.forEach((l) => say(l))
   let hermes = findHermes({ ...deps, env })
-  if (hermes) say(`[ok] Hermes: ${shown(hermes)}`)
-  else if (missing.length || env.HERMES_EXE) {
+  if (!hermes && (missing.length || env.HERMES_EXE)) {
     missing.push([
       'Hermes Agent',
+      'Needed for: the agent team (stage 2 onward).',
       ...(env.HERMES_EXE ? [`HERMES_EXE is set to ${shown(env.HERMES_EXE)}, but nothing is there. Fix or remove it.`] : []),
       deps.platform === 'win32' ? `Install it in PowerShell: ${LINKS.hermesWin}` : `Install it: ${LINKS.hermesSh}`,
       `Installation guide: ${LINKS.hermesDocs}`,
@@ -469,8 +531,15 @@ export async function wizard(deps) {
     say('', 'Install what is missing, then run `npm run setup` again.')
     return 1
   }
-  if (!hermes) {
-    say('')
+  stageStatus[1] = 'done'
+
+  // Stage 2: Hermes (required): found or installed, then its health check.
+  heading(2)
+  if (hermes) {
+    say(`[ok] Hermes: ${shown(hermes)}`)
+    stageStatus[2] = 'already done (Hermes was already installed)'
+  } else {
+    stageStatus[2] = 'done (Hermes installed)'
     const installed = await offerInstall({
       platform: deps.platform,
       env,
@@ -514,9 +583,9 @@ export async function wizard(deps) {
     return { ok: r.code === 0 && Boolean(answer), answer, code: r.code, detail: redact(tail(`${r.stdout ?? ''}\n${r.stderr ?? ''}`.trim())) }
   }
 
-  // (b) Q1: the brain, then what it means for the voice app
+  // (b) Stage 3, Q1: the brain, then what it means for the voice app
   let family
-  say('')
+  heading(3)
   for (;;) {
     const a = String(await ask(Q.brain)).trim()
     family = FAMILY_BY_CHOICE[a]
@@ -525,10 +594,9 @@ export async function wizard(deps) {
   }
   const fam = FAMILIES[family]
 
-  const claude = await claudeStatus({ run, which: deps.which })
-  say('', claudeLine(claude))
   if (family !== 'claude') {
     say(
+      '',
       `The agent team will use ${fam.label}. The talking interface (the voice app) does not follow that choice: it also needs Claude Code installed and signed in.`,
     )
     if (!notNo(await ask(Q.voiceGo))) {
@@ -642,9 +710,18 @@ export async function wizard(deps) {
     }
     say('', `Created profile ${sup}.`)
   }
+  stageStatus[3] = 'done'
 
-  // (e) The API key goes into the profile's .env (key route only). Values
+  // (e) Stage 4: the API key goes into the profile's .env (key route only). Values
   // stay inside the setup-env helpers; only names and words come back.
+  heading(4)
+  if (route === 'signin') {
+    say("No key file is needed: you sign in inside Hermes's own model picker, which opens next.")
+    stageStatus[4] = 'skipped (sign-in, no key file needed)'
+  } else if (route === 'local') {
+    say('No key file is needed: a local model runs without a key.')
+    stageStatus[4] = 'skipped (local model, no key file needed)'
+  }
   let key
   const editKey = async (replace) => {
     const { envPath, name } = key
@@ -733,6 +810,7 @@ export async function wizard(deps) {
     const filled = deps.exists(envPath) && envValueState(deps.readFile(envPath), variable.name) === 'filled'
     const keep = filled && notNo(await ask(Q.keepKey(variable.name)))
     if (!keep && !(await editKey(filled))) return 1
+    stageStatus[4] = keep ? 'already done (the saved key was kept)' : 'done'
   }
 
   const isLocalProvider = async (provider) => {
@@ -777,7 +855,8 @@ export async function wizard(deps) {
     return 1
   }
 
-  // (f) Q3: workers, Q4: fallback
+  // (f) Stage 5, Q3: workers, Q4: fallback
+  heading(5)
   let worker = { ...brain }
   for (;;) {
     const a = String(await ask(Q.worker(brain.model))).trim()
@@ -818,19 +897,7 @@ export async function wizard(deps) {
     repoPath,
     cloneFrom: sup,
   }
-  let shell
-  if (deps.platform === 'win32') {
-    const pwsh = deps.which('pwsh')
-    const gitBash = [env.ProgramFiles, env['ProgramW6432']]
-      .filter(Boolean)
-      .map((r) => `${slash(r)}/Git/bin/bash.exe`)
-      .find((p) => deps.exists(p))
-    if (pwsh) shell = { cmd: pwsh, kind: 'ps1' }
-    else if (gitBash) shell = { cmd: gitBash, kind: 'sh' }
-  } else {
-    const bash = deps.which('bash')
-    if (bash) shell = { cmd: bash, kind: 'sh' }
-  }
+  const shell = shellFound
   const logsDir = `${repoPath}/logs`
   const logPath = `${logsDir}/setup-profiles-${stampOf(deps.now())}.log`
   const agentsArg = team.starters.join(',')
@@ -951,6 +1018,82 @@ export async function wizard(deps) {
     appModel,
   }
   if (existing !== undefined) deps.writeFile(configPath, JSON.stringify(mergeAppConfig(existing, settings), null, 2) + '\n')
+  stageStatus[5] = link.ok ? 'done' : 'done, but the link test failed (see above)'
+
+  // (j) Stage 6: the bundled skills, into the supervisor and every agent profile
+  // that was created (bridges such as claude and gemini are not Hermes profiles).
+  heading(6)
+  const hermesProfiles = [sup, ...team.starters]
+  const skills = await skillsStage({
+    ask,
+    say,
+    run,
+    exists: deps.exists,
+    readFile: deps.readFile,
+    copyDir: deps.copyDir,
+    mkdir: deps.mkdir,
+    hermes,
+    profiles: hermesProfiles,
+    sourceDir: `${kitDir}/skills`,
+    platform: deps.platform,
+  })
+  if (skills.status === 'done') {
+    const withNotes = skills.notes.length ? ', with notes above' : ''
+    if (!skills.installed) say('[ok] Every skill was already there; nothing was copied.')
+    const copiedTo = skills.profiles.filter((p) => p.installed).length
+    stageStatus[6] = skills.installed
+      ? `done (copied into ${copiedTo} profile${copiedTo === 1 ? '' : 's'}${skills.skipped ? '; some were already there' : ''}${withNotes})`
+      : `already done${withNotes}`
+  } else {
+    stageStatus[6] = { declined: 'declined', nothing: 'skipped (no bundled skills)', failed: 'failed (see above)' }[skills.status] ?? skills.status
+  }
+
+  // (k) Stage 7: long-term memory (GBrain), optional. The app reads the
+  // `gbrain` key of venom.config.json; on a failure it stays as it was.
+  heading(7)
+  const memoryPaths = gbrainPaths({ home, env, platform: deps.platform })
+  const memoryWasOn = deps.exists(memoryPaths.appToken) && deps.exists(memoryPaths.config)
+  const memory = await gbrainStage({
+    ask,
+    say,
+    run,
+    runInherit: deps.runInherit,
+    startDetached: deps.startDetached,
+    fetchStatus: deps.fetchStatus,
+    sleep: deps.sleep,
+    exists: deps.exists,
+    readFile: deps.readFile,
+    writeFile: deps.writeFile,
+    mkdir: deps.mkdir,
+    which: deps.which,
+    platform: deps.platform,
+    home,
+    env,
+    hermes,
+    profiles: hermesProfiles,
+    port: gbrainPort(env),
+    redact,
+  })
+  if (memory.status === 'on' || memory.status === 'declined') {
+    const on = memory.status === 'on'
+    let saved = false
+    if (existing !== undefined) {
+      try {
+        const now = deps.exists(configPath) ? JSON.parse(deps.readFile(configPath)) : {}
+        deps.writeFile(configPath, JSON.stringify(mergeAppConfig(now, { gbrain: on }), null, 2) + '\n')
+        saved = true
+      } catch {
+        saved = false
+      }
+    }
+    if (!saved) say(`Add "gbrain": ${on} to ${shown(configPath)} by hand.`)
+    else if (on) say('[ok] Venom OS will use long-term memory ("gbrain": true in venom.config.json).')
+    else say('Saved "gbrain": false in venom.config.json: Venom OS runs with long-term memory off.')
+    stageStatus[7] = on ? (memoryWasOn ? 'already done' : 'done') : 'declined (memory is off)'
+  } else {
+    say('Long-term memory was not set up. Venom OS works fine with memory off; run npm run setup again to try once more.')
+    stageStatus[7] = memory.status === 'failed' ? 'failed (memory is off; npm run setup can try again)' : 'skipped'
+  }
 
   const failed = results.filter((r) => !r.ok).map((r) => r.name)
   const teamFile = rosterSaved
@@ -972,6 +1115,9 @@ export async function wizard(deps) {
     `  Link test: ${link.ok ? 'passed' : 'FAILED (see above)'}`,
     `  Voice app model: ${appModel || 'your Claude Code default'}`,
     `  Saved in ${existing === undefined ? '(not saved)' : shown(configPath)}`,
+    '',
+    'The seven stages:',
+    ...STAGES.map((title, i) => `  Stage ${i + 1}, ${title}: ${stageStatus[i + 1] ?? 'skipped'}`),
     '',
     '1. Start Venom OS: npm start   then open the printed address (http://localhost:5173) in Google Chrome.',
     '2. You should see a ring with the word INITIALISE: click it, allow the microphone and say "Hey Venom".',

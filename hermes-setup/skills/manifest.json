@@ -1,0 +1,76 @@
+{
+  "skills": [
+    {
+      "name": "briefing-agents",
+      "dir": "briefing-agents",
+      "source": "in-house",
+      "licence": "MIT",
+      "description": "How the supervisor turns a request into a seven-part brief, sends it to an agent, checks the report and stops a run.",
+      "count": 1
+    },
+    {
+      "name": "agent-team-expansion",
+      "dir": "agent-team-expansion",
+      "source": "in-house",
+      "licence": "MIT",
+      "description": "Adding specialist agents to the team, bridging non-Hermes CLIs, and the nested roster-management lifecycle skill.",
+      "count": 2
+    },
+    {
+      "name": "agent-skill-scout",
+      "dir": "agent-skill-scout",
+      "source": "in-house",
+      "licence": "MIT",
+      "description": "Finds Skills Hub skills that fill gaps in each agent's job and installs them into that agent's profile.",
+      "count": 1
+    },
+    {
+      "name": "obsidian-vault-management",
+      "dir": "obsidian-vault-management",
+      "source": "in-house",
+      "licence": "MIT",
+      "description": "Sets up and maintains an Obsidian vault with one hub note per project, with config and note templates.",
+      "count": 1
+    },
+    {
+      "name": "deep-uninstallation-and-cleanup",
+      "dir": "deep-uninstallation-and-cleanup",
+      "source": "in-house",
+      "licence": "MIT",
+      "description": "Removes every trace of a program or configuration in reversible stages, then verifies nothing is left.",
+      "count": 1
+    },
+    {
+      "name": "market-intelligence",
+      "dir": "market-intelligence",
+      "source": "in-house",
+      "licence": "MIT",
+      "description": "Verifies product prices and listings from live pages and reports them in a fixed table.",
+      "count": 1
+    },
+    {
+      "name": "desktop-app-engineering",
+      "dir": "desktop-app-engineering",
+      "source": "in-house",
+      "licence": "MIT",
+      "description": "Building, packaging and safely testing Electron desktop apps.",
+      "count": 1
+    },
+    {
+      "name": "project-templating",
+      "dir": "project-templating",
+      "source": "in-house",
+      "licence": "MIT",
+      "description": "Making a clean, shareable copy of a project without private data, with a first-run setup wizard.",
+      "count": 1
+    },
+    {
+      "name": "agent-skills",
+      "dir": "agent-skills",
+      "source": "https://github.com/addyosmani/agent-skills",
+      "licence": "MIT",
+      "description": "Addy Osmani's pack of engineering-workflow skills (specs, planning, TDD, review, debugging, shipping), unmodified.",
+      "count": 25
+    }
+  ]
+}

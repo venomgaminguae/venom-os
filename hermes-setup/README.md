@@ -1,7 +1,7 @@
 # Hermes setup kit for Venom OS
 
 Venom OS's voice brain hands real work to a team of agents. Each agent is a
-profile of **Hermes Agent** (open source, by Nous Research). This kit
+profile of **Hermes** (open source, by Nous Research). This kit
 recreates that team on your own machine from generic templates:
 
 | Profile | Role |
@@ -49,18 +49,21 @@ hermes-setup/
   config/model-settings.example.yaml brain + worker model keys
   config/fallback-chain.example.yaml fallback chain shape
   config/mcp-team.example.md         team connector registration, both places
+  skills/                            bundled skills; stage 6 of the wizard copies them
 ```
 
 ## Quick setup: the wizard
 
 You need:
 - Node.js 22.12 or newer and Google Chrome,
-- Hermes Agent: if it is missing, the wizard shows the official install
+- Hermes: if it is missing, the wizard shows the official install
   command and offers to run it (or install it yourself, step 1),
 - on Windows, PowerShell 7 (`pwsh`) or Git for Windows (its bash); elsewhere, bash,
 - for a local brain, Ollama or LM Studio running with at least one model,
 - for the voice app, Claude Code installed and signed in (the wizard reports
-  whether it is).
+  whether it is),
+- optional, for long-term memory only: Bun and GBrain (stage 7 offers to
+  install both and asks first).
 
 From the repository root, in a real terminal window (not through a pipe):
 
@@ -69,7 +72,10 @@ npm ci
 npm run setup
 ```
 
-The wizard offers to install Hermes if it is missing and runs `hermes doctor`.
+The wizard runs seven stages: checking this PC, Hermes, the main brain, your
+key, Venom OS and the team, skills, and memory (GBrain). Each can be run
+again; a step that is already done is skipped with one line.
+It offers to install Hermes if it is missing and runs `hermes doctor`.
 After the brain question it asks, for GPT and Claude, whether to sign in with
 your subscription in Hermes's own picker (`hermes -p <supervisor> model`) or
 to paste an API key. In that case it adds an empty line for the key to the supervisor
@@ -79,7 +85,7 @@ to the API key. It ends with a link test: the supervisor hands one agent a
 one-line task through the team connector and must get the reply back. The
 full list of steps is in the main README, under "Install and first run".
 
-It saves `brain`, `worker`, `supervisorProfile` and `appModel` in
+It saves `brain`, `worker`, `supervisorProfile`, `appModel` and `gbrain` in
 `venom.config.json` in the repository root (git-ignored; other keys in it are
 kept). Running it again is safe.
 
@@ -88,6 +94,49 @@ command), `npm run setup -- --check` (read-only preflight, changes nothing).
 
 Then check the result with step 10 and, for the voice app, steps 6 and 7. The
 rest of this file is the manual path, and what the wizard does under the hood.
+
+## Skills (stage 6)
+
+`skills/` holds the skills bundled for the team: eight written for this
+project and Addy Osmani's agent-skills pack (25 skills, MIT, unmodified from
+upstream). `skills/manifest.json` lists each folder with its source, licence
+and number of `SKILL.md` files. Stage 6 shows that list, asks "Install these
+skills into your Hermes profiles? (Y/n)" and copies each folder into the
+`skills` folder of every profile it set up (found with
+`hermes -p <profile> config path`). A skill that is already there is never
+overwritten. Hermes's own bundled skills are not repeated, and graphify is not
+shipped (`uv tool install graphifyy`, then
+`graphify install --platform hermes`). Copying by hand, and the full list:
+[skills/README.md](skills/README.md). Covered by unit tests only; no real
+Hermes has loaded these skills from this public copy yet.
+
+## Memory: GBrain (stage 7)
+
+Optional. GBrain (MIT, by Garry Tan, <https://github.com/garrytan/gbrain>)
+is a memory server that runs only on this PC. Stage 7 asks first; on yes it
+installs Bun and GBrain if missing (asking before each), creates an empty
+store in `~/.gbrain` (an existing one is kept), creates two access tokens
+(`~/.gbrain/tokens/venom-os.token` for the app, `hermes.token` for Hermes),
+writes and starts `~/.gbrain/start-gbrain-server.cmd`
+(`gbrain serve --http --port 3131`), and connects each profile to it as the
+MCP server `gbrain`:
+
+```sh
+hermes -p <profile> config set mcp_servers.gbrain.url http://127.0.0.1:3131/mcp
+hermes -p <profile> config set mcp_servers.gbrain.connect_timeout 60
+hermes -p <profile> config set mcp_servers.gbrain.headers.Authorization 'Bearer ${MCP_GBRAIN_API_KEY}'
+hermes -p <profile> config set mcp_servers.gbrain.enabled true
+hermes -p <supervisor> mcp test gbrain
+```
+
+The token itself goes only into the profile's `.env` (the file
+`hermes -p <profile> config env-path` names), as `MCP_GBRAIN_API_KEY=`; the
+config holds the placeholder above. `hermes mcp add` is not used because it
+asks for the token at a prompt. Saying no leaves `"gbrain": false`, and Venom
+OS works with long-term memory off. What the app stores and recalls, the HUD
+row and the variables are in the main README, under "Memory". Covered by unit
+tests against a stand-in (`scripts/fake-gbrain.mjs`); not yet run against a
+real Hermes.
 
 ## 1. Install Hermes
 
@@ -462,7 +511,7 @@ Finally start Venom OS (`Venom.cmd`): its log prints
 
 ## Where each command comes from
 
-Checked against Hermes Agent v0.23.1 help output and the docs pages linked above.
+Checked against Hermes v0.23.1 help output and the docs pages linked above.
 
 | Command | Source |
 |---|---|

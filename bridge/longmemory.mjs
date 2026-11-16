@@ -585,8 +585,11 @@ function localStamp(when) {
 
 const whoName = (who) => (who === 'owner' ? 'Owner' : who === 'venom' ? 'Venom' : String(who ?? '') || 'Unknown')
 
-/** The text memory_recall hands the model. */
-export function formatRecall(result, { maxChars = 3500 } = {}) {
+/** The line above the hits (Honcho: every message of chat and voice). */
+const RECALL_HEADING = "Past messages (all of the owner's conversations, chat and voice):"
+
+/** The text memory_recall hands the model. `heading` replaces the line above the hits. */
+export function formatRecall(result, { maxChars = 3500, heading = RECALL_HEADING } = {}) {
   if (!result?.ok) {
     return clip(
       `Long-term memory could not be reached (${result?.error || 'unknown error'}). Use memory_search for spoken conversations on this PC.`,
@@ -603,29 +606,37 @@ export function formatRecall(result, { maxChars = 3500 } = {}) {
       (h) =>
         `${localStamp(h.when)} · ${h.session || 'unknown session'} · ${whoName(h.who)}: ${clip(String(h.text ?? '').replace(/\s+/g, ' ').trim(), HIT_CHARS)}`,
     )
-    parts.push(`Past messages (all of the owner's conversations, chat and voice):\n${lines.join('\n')}`)
+    parts.push(`${heading}\n${lines.join('\n')}`)
   }
   return clip(parts.join('\n\n'), maxChars)
 }
 
 const text = (t, isError = false) => ({ ...(isError ? { isError: true } : {}), content: [{ type: 'text', text: t }] })
 
-/** The in-process MCP server, `venom_recall`, with its one read-only tool. */
-export function longMemoryServer(mem) {
+/** The recall tool's default description (Honcho, shared with Hermes's chat). */
+const RECALL_DESCRIPTION =
+  'Search the long-term memory you share with Hermes, the owner\'s chat assistant: everything he has said to either of you, by voice here or in the chat, plus what is known about him. Use it when he refers to something from before that memory_search (spoken conversations on this PC) does not find, something he told the chat assistant, or asks what you know or remember about him. Pass a short question or a few keywords. It takes a second or two: never call it for an ordinary question.'
+
+/**
+ * The in-process MCP server, `venom_recall`, with its one read-only tool.
+ * `description` replaces the tool's default description and `heading` the
+ * line above the hits (GBrain uses both).
+ */
+export function longMemoryServer(mem, { description = RECALL_DESCRIPTION, heading } = {}) {
   return createSdkMcpServer({
     name: 'venom_recall',
     version: '1.0.0',
     tools: [
       tool(
         'memory_recall',
-        'Search the long-term memory you share with Hermes, the owner\'s chat assistant: everything he has said to either of you, by voice here or in the chat, plus what is known about him. Use it when he refers to something from before that memory_search (spoken conversations on this PC) does not find, something he told the chat assistant, or asks what you know or remember about him. Pass a short question or a few keywords. It takes a second or two: never call it for an ordinary question.',
+        description,
         {
           query: z.string(),
           limit: z.number().optional(),
         },
         async (args) => {
           const result = await mem.recall(args.query, { limit: args.limit })
-          return text(formatRecall(result), !result.ok)
+          return text(formatRecall(result, heading ? { heading } : {}), !result.ok)
         },
       ),
     ],

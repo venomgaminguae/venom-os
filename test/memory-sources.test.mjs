@@ -14,6 +14,8 @@ import {
   resetMemorySourcesCache,
   SOURCE_IDS,
   vaultRow,
+  gbrainRow,
+  sourceIds,
 } from '../bridge/memorysources.mjs'
 
 const MARK = 'ZZ-SECRET-MARKER-7731'
@@ -228,6 +230,77 @@ test('a row whose check throws becomes check failed; the rest still answer', asy
   const notes = rowOf(res, 'notes')
   assert.deepEqual([notes.state, notes.level, notes.detail], ['not found', 'warn', 'check failed'])
   assert.equal(rowOf(res, 'vault').state, 'read-only')
+})
+
+// --- GBrain (VENOM_GBRAIN=1 puts it in the long-term slot) -------------------
+
+const REFUSED = `GBrain refused the key (401) on ${MARK} gbr_secretkey`
+
+function fakeGbrain(opts = {}) {
+  const long = fakeLong(opts)
+  const inner = long.status
+  long.status = () => ({ ...inner(), provider: 'gbrain', label: 'GBrain', ...opts, lastError: opts.lastError ?? `boom ${MARK}` })
+  return long
+}
+
+test('the GBrain row: every branch, and lastError never reaches the row', async () => {
+  const run = async (long) => {
+    resetMemorySourcesCache()
+    const r = await gbrainRow(long)
+    const json = JSON.stringify(r)
+    assert.ok(!json.includes(MARK) && !json.includes('refused the key') && !json.includes('gbr_secretkey'), json)
+    const { state, level, detail } = r
+    return { state, level, detail }
+  }
+  assert.deepEqual(await run(undefined), { state: 'off', level: 'quiet', detail: 'off' })
+  assert.deepEqual(await run(fakeGbrain({ enabled: false })), { state: 'off', level: 'quiet', detail: 'off' })
+  // ping fails, key refused (by text, by 401, by 403)
+  assert.deepEqual(await run(fakeGbrain({ ok: false, lastError: REFUSED })), { state: 'key refused', level: 'warn', detail: 'token not accepted' })
+  assert.deepEqual(await run(fakeGbrain({ ok: false, lastError: REFUSED, queued: 2 })), { state: 'key refused', level: 'warn', detail: '2 waiting' })
+  assert.equal((await run(fakeGbrain({ ok: false, lastStatus: 401 }))).state, 'key refused')
+  assert.equal((await run(fakeGbrain({ ok: false, lastStatus: 403 }))).state, 'key refused')
+  // ping fails otherwise
+  assert.deepEqual(await run(fakeGbrain({ ok: false })), { state: 'offline', level: 'warn', detail: 'not answering' })
+  assert.deepEqual(await run(fakeGbrain({ ok: false, queued: 3, lastStatus: 500 })), { state: 'offline', level: 'warn', detail: '3 waiting' })
+  // ping ok, writes failing
+  assert.deepEqual(await run(fakeGbrain({ queued: 4, writeFault: true, lastStatus: 401 })), { state: 'key refused', level: 'warn', detail: '4 waiting' })
+  assert.deepEqual(await run(fakeGbrain({ queued: 1, writeFault: true, lastStatus: 403 })), { state: 'key refused', level: 'warn', detail: '1 waiting' })
+  assert.deepEqual(await run(fakeGbrain({ queued: 5, writeFault: true, lastStatus: 500 })), {
+    state: 'read-only',
+    level: 'warn',
+    detail: '5 waiting · writes failing',
+  })
+  // ping ok, writes fine
+  assert.deepEqual(await run(fakeGbrain()), { state: 'connected', level: 'ok', detail: 'no write tried yet' })
+  assert.deepEqual(await run(fakeGbrain({ sent: 3 })), { state: 'connected', level: 'ok', detail: '3 sent' })
+  assert.deepEqual(await run(fakeGbrain({ sent: 7, queued: 2 })), { state: 'connected', level: 'ok', detail: '7 sent · 2 waiting' })
+  resetMemorySourcesCache()
+  const at = await gbrainRow(fakeGbrain({ sent: 1, lastOkAt: Date.UTC(2026, 10, 14, 13, 19, 4) }))
+  assert.equal(at.updated, '2026-11-14T13:19:04.000Z')
+})
+
+test('VENOM_GBRAIN=1 puts GBrain first; six rows; off or unset keeps Honcho', async () => {
+  const { root, env } = fixture()
+  assert.deepEqual(sourceIds({}), SOURCE_IDS)
+  assert.deepEqual(sourceIds({ VENOM_GBRAIN: '0' }), SOURCE_IDS)
+  assert.deepEqual(sourceIds({ VENOM_GBRAIN: '1' }), ['gbrain', 'notes', 'skills', 'vault', 'graph', 'log'])
+  assert.deepEqual(SOURCE_IDS, ['honcho', 'notes', 'skills', 'vault', 'graph', 'log'])
+
+  const on = await memorySources({ long: fakeGbrain({ queued: 2, writeFault: true, lastError: REFUSED }), env: { ...env, VENOM_GBRAIN: '1' } })
+  assert.equal(on.rows.length, 6)
+  assert.deepEqual(on.rows.map((r) => r.id), ['gbrain', 'notes', 'skills', 'vault', 'graph', 'log'])
+  assert.deepEqual(on.rows.map((r) => r.label), ['GBrain', ...LABELS.slice(1)])
+  const g = rowOf(on, 'gbrain')
+  assert.deepEqual([g.state, g.level, g.detail], ['key refused', 'warn', '2 waiting'])
+  const json = JSON.stringify(on)
+  assert.ok(!json.includes(MARK) && !json.includes('refused the key') && !json.includes('gbr_secretkey'))
+  assert.ok(!json.includes(root))
+
+  resetMemorySourcesCache()
+  const off = await memorySources({ long: fakeLong(), env })
+  assertClean(off, root)
+  assert.equal(off.rows[0].id, 'honcho')
+  assert.equal(off.rows[0].label, 'Honcho')
 })
 
 test('helpers: entry counting and the Hermes root rule', () => {

@@ -10,24 +10,45 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { LINKS, NO_TEAM_LINE, Q, SPECIALISTS, shownPath, wizard } from '../scripts/setup-lib.mjs'
+import { LINKS, NO_TEAM_LINE, Q, SPECIALISTS, shownPath, stageTitle, wizard } from '../scripts/setup-lib.mjs'
 import { Q_INSTALL } from '../scripts/setup-hermes.mjs'
 import { ENV_HINT, ENV_Q_DONE } from '../scripts/setup-env.mjs'
+import { Q_SKILLS } from '../scripts/setup-skills.mjs'
+import { Q_GBRAIN } from '../scripts/setup-gbrain.mjs'
 import { BRIDGE_AGENTS, STARTER_AGENTS } from '../hermes-mcp/roster.mjs'
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
 const KIT = join(ROOT, 'hermes-setup').replace(/\\/g, '/')
 const FAKE = join(ROOT, 'scripts', 'fake-hermes.mjs')
+const FAKE_GBRAIN = join(ROOT, 'scripts', 'fake-gbrain.mjs')
 const EDITOR = join(ROOT, 'scripts', 'fake-editor.mjs')
 const NODE = process.execPath
 const WIN = process.platform === 'win32'
 // Built at run time so no key-shaped literal sits in the repository.
 const KEY = 's' + 'k-proj-' + ['WIZARDfake', '0a1b2c3d4e5f6g7h8i9j'].join('')
 const fwd = (p) => String(p).replace(/\\/g, '/')
+/** A GBrain token on screen: the prefix and 10 or more token characters. */
+const TOKEN_ON_SCREEN = new RegExp(['gbrain', '_[A-Za-z0-9_-]{10,}'].join(''))
+
+/** A port the OS says is free right now (never GBrain's real one). */
+const freePort = () =>
+  new Promise((resolve, reject) => {
+    const s = createServer()
+    s.on('error', reject)
+    s.listen(0, '127.0.0.1', () => {
+      const { port } = s.address()
+      s.close(() => resolve(port))
+    })
+  })
+const PORT = await freePort()
+
+/** The two new stages answered no: skills, then memory. */
+const NO_EXTRAS = [[Q_SKILLS, 'n'], [Q_GBRAIN.install, 'n']]
 
 /** The team question answered with Enter four times: all four starters. */
 const TEAM = STARTER_AGENTS.map((a) => [Q.agent(a), ''])
@@ -52,20 +73,25 @@ const BASH = WIN
 const SHELL_OK = WIN ? Boolean(PWSH) : Boolean(BASH)
 const FULL = { skip: !SHELL_OK && 'no pwsh/bash' }
 
-/** The text of the two hermes shims, both pointing at fake-hermes.mjs. */
-const shimText = () => ({
-  cmd: `@"${NODE}" "${FAKE}" %*\r\n`,
-  sh: `#!/bin/sh\nexec "${fwd(NODE)}" "${fwd(FAKE)}" "$@"\n`,
+/** The text of the two hermes shims, both pointing at fake-hermes.mjs (or another .mjs). */
+const shimText = (target = FAKE) => ({
+  cmd: `@"${NODE}" "${target}" %*\r\n`,
+  sh: `#!/bin/sh\nexec "${fwd(NODE)}" "${fwd(target)}" "$@"\n`,
 })
 
-/** A temp world: repo root, fake Hermes state, agents folder, and (unless `shims: false`) the hermes shims. */
+/**
+ * A temp world: repo root, fake Hermes state, agents folder, a GBrain home,
+ * (unless `shims: false`) the hermes shims, and always the gbrain shims (used
+ * only when a test sets GBRAIN_EXE to w.gbrain).
+ */
 function world({ shims = true } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'venom-wizard-'))
   const repo = join(dir, 'repo')
   const state = join(dir, 'state')
   const bin = join(dir, 'bin')
   const agents = join(dir, 'agents')
-  for (const d of [repo, join(repo, 'hermes-mcp'), state, bin]) mkdirSync(d, { recursive: true })
+  const gbrainHome = join(dir, 'gbrain-home')
+  for (const d of [repo, join(repo, 'hermes-mcp'), state, bin, gbrainHome]) mkdirSync(d, { recursive: true })
   writeFileSync(join(repo, 'hermes-mcp', 'server.mjs'), '// stand-in\n')
   writeFileSync(join(repo, 'venom.config.json'), JSON.stringify({ ownerName: 'Test Owner' }, null, 2))
   const cmdShim = join(bin, 'hermes.cmd')
@@ -74,8 +100,34 @@ function world({ shims = true } = {}) {
     writeFileSync(cmdShim, shimText().cmd)
     writeFileSync(shShim, shimText().sh, { mode: 0o755 })
   }
-  return { dir, repo, state, bin, agents, cmdShim, shShim, hermes: WIN ? cmdShim : shShim }
+  const gbrainCmd = join(bin, 'gbrain.cmd')
+  const gbrainSh = join(bin, 'gbrain')
+  writeFileSync(gbrainCmd, shimText(FAKE_GBRAIN).cmd)
+  writeFileSync(gbrainSh, shimText(FAKE_GBRAIN).sh, { mode: 0o755 })
+  return {
+    dir, repo, state, bin, agents, cmdShim, shShim, hermes: WIN ? cmdShim : shShim,
+    gbrainHome, gbrainCmd, gbrainSh, gbrain: WIN ? gbrainCmd : gbrainSh, gbrainLog: join(dir, 'gbrain-calls.jsonl'),
+  }
 }
+
+/** Every fake GBrain server a run started (detached): their pids, written by fake-gbrain.mjs. */
+function killServers(w) {
+  const file = join(w.gbrainHome, '.gbrain', 'fake-serve.pids')
+  if (!existsSync(file)) return 0
+  let n = 0
+  for (const pid of readFileSync(file, 'utf8').split(/\r?\n/).map(Number).filter((p) => p > 0)) {
+    try {
+      process.kill(pid)
+      n++
+    } catch {
+      // already gone
+    }
+  }
+  return n
+}
+
+const gbrainCalls = (w) =>
+  existsSync(w.gbrainLog) ? readFileSync(w.gbrainLog, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []
 
 /** A stand-in installer: a node script in the temp folder that may drop the hermes shims. */
 function installer(w, { createsShims }) {
@@ -129,6 +181,10 @@ async function drive(w, { answers, picks = [], env: envExtra = {}, which: whichE
     FAKE_EDITOR_MODE: 'fill',
     FAKE_EDITOR_KEY: KEY,
     VENOM_ROSTER_FILE: rosterFile(w),
+    // GBrain: a temp home and a free port, so no test can reach the real ones.
+    GBRAIN_HOME: w.gbrainHome,
+    VENOM_SETUP_GBRAIN_PORT: String(PORT),
+    FAKE_GBRAIN_LOG: w.gbrainLog,
     ...envExtra,
   }
   for (const k of Object.keys(env)) if (env[k] === undefined) delete env[k]
@@ -145,8 +201,9 @@ async function drive(w, { answers, picks = [], env: envExtra = {}, which: whichE
     new Promise((resolve) => {
       runs.push({ cmd, args, interactive: Boolean(opts.interactive) })
       const isHermes = cmd === w.cmdShim || cmd === w.shShim
+      const isGbrain = cmd === w.gbrainCmd || cmd === w.gbrainSh
       const pick = isHermes && args[0] === '-p' && args[2] === 'model' ? { FAKE_HERMES_PICK: pickQueue.shift() ?? '' } : {}
-      const [file, argv] = isHermes ? [NODE, [FAKE, ...args]] : [cmd, args]
+      const [file, argv] = isHermes ? [NODE, [FAKE, ...args]] : isGbrain ? [NODE, [FAKE_GBRAIN, ...args]] : [cmd, args]
       let child
       try {
         child = spawn(file, argv, {
@@ -211,6 +268,24 @@ async function drive(w, { answers, picks = [], env: envExtra = {}, which: whichE
     now: () => new Date(),
     nowMs: () => Date.now(),
     randomHex: () => randomBytes(4).toString('hex'),
+    home: w.dir,
+    runInherit: async (cmd, args, opts = {}) => ({ code: (await run(cmd, args, { ...opts, interactive: true })).code }),
+    startDetached: (cmd, args, opts = {}) => {
+      runs.push({ cmd, args, interactive: false, detached: true })
+      const child = spawn(cmd, args, { detached: true, stdio: 'ignore', windowsHide: true, env: { ...process.env, ...env, ...opts.env } })
+      child.on('error', () => {})
+      child.unref()
+    },
+    fetchStatus: async (url, ms = 2000) => {
+      assert.ok(!url.includes(':3131/'), `a test reached for the real GBrain port: ${url}`)
+      try {
+        return (await fetch(url, { signal: AbortSignal.timeout(ms) })).status
+      } catch {
+        return 0
+      }
+    },
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, Math.min(ms, 250))),
+    copyDir: (from, to) => cpSync(from, to, { recursive: true, errorOnExist: true, force: false }),
   }
   const code = await wizard(deps)
   assert.equal(queue.length, 0, `questions not asked: ${queue.map((q) => q[0]).join(' | ')}`)
@@ -320,7 +395,9 @@ test('Gemini: no subscription sign-in, straight to the key route without the acc
 })
 
 const gptKey = [[Q.brain, '1'], [Q.voiceGo, ''], [Q.access, '2']]
-const rest = [[/^Use a cheaper model/, ''], [Q.fallback, ''], [Q.appModel, '']]
+const rest = [[/^Use a cheaper model/, ''], [Q.fallback, ''], [Q.appModel, ''], ...NO_EXTRAS]
+const claudeRest = rest
+const claudeStart = [[Q.brain, '2'], [Q.access, '1'], [Q.supervisor, 'boss']]
 
 test('key route, editor leaves the line empty: "No key was found"; declining to reopen exits 1', async () => {
   const w = world()
@@ -409,7 +486,7 @@ test('whole run, GPT on the API-key route: key file, picker, team, agents, link 
     picks: ['openai-api/test-gpt-model'],
     env: { FAKE_HERMES_NEED_KEY: 'OPENAI_API_KEY' },
   })
-  if (process.env.VENOM_SETUP_TRANSCRIPT) writeFileSync(process.env.VENOM_SETUP_TRANSCRIPT, transcript(w, r.events))
+  assert.doesNotMatch(transcript(w, r.events), TOKEN_ON_SCREEN)
   assert.equal(r.code, 0, r.out)
   assert.match(r.out, /Hermes reads this key from the variable OPENAI_API_KEY/)
   assert.match(r.out, /\[ok\] A key is saved for OPENAI_API_KEY\./)
@@ -459,10 +536,121 @@ test('whole run, GPT on the API-key route: key file, picker, team, agents, link 
   for (const x of r.runs) assert.ok(!x.args.join(' ').includes(KEY), 'the key was passed in an argv')
 })
 
+// ------------------------------------------------------------- stages 6 and 7: skills and memory
+
+const skillFiles = (w, profile) => {
+  const dir = join(w.state, 'profiles', profile, 'skills')
+  return existsSync(dir) ? walk(dir).filter((f) => /SKILL\.md$/.test(f)) : []
+}
+const appConfig = (w) => JSON.parse(readFileSync(join(w.repo, 'venom.config.json'), 'utf8'))
+const tokenFiles = (w) => ['venom-os.token', 'hermes.token'].map((f) => join(w.gbrainHome, '.gbrain', 'tokens', f))
+const afterApp = [[/^Use a cheaper model/, ''], [Q.fallback, ''], [Q.appModel, '']]
+
+test('whole run, yes everywhere: seven stages in order, skills copied, GBrain on; no token on screen', FULL, async () => {
+  const w = world()
+  const port = await freePort()
+  try {
+    const r = await drive(w, {
+      answers: [...gptKey, [Q.supervisor, ''], ...TEAM, ...afterApp, [Q_SKILLS, ''], [Q_GBRAIN.install, '']],
+      picks: ['openai-api/test-gpt-model'],
+      env: { FAKE_HERMES_NEED_KEY: 'OPENAI_API_KEY', GBRAIN_EXE: w.gbrain, VENOM_SETUP_GBRAIN_PORT: String(port) },
+    })
+    const text = transcript(w, r.events)
+    if (process.env.VENOM_SETUP_TRANSCRIPT) writeFileSync(process.env.VENOM_SETUP_TRANSCRIPT, text)
+    assert.equal(r.code, 0, r.out)
+    assert.doesNotMatch(text, TOKEN_ON_SCREEN)
+    // The seven headings, in order.
+    let at = -1
+    for (let n = 1; n <= 7; n++) {
+      const i = r.out.indexOf(stageTitle(n))
+      assert.ok(i > at, `${stageTitle(n)} after the one before`)
+      at = i
+    }
+    // Skills: in the supervisor and every agent profile, never in a bridge.
+    for (const p of ['venom', ...SPECIALISTS]) assert.ok(skillFiles(w, p).length > 0, `a SKILL.md in ${p}'s skills folder`)
+    // Memory: store, tokens, the fake server answering, Hermes connected, the app setting on.
+    for (const f of tokenFiles(w)) assert.ok(existsSync(f), `${f} exists`)
+    assert.equal((await fetch(`http://127.0.0.1:${port}/health`)).status, 200, 'the fake GBrain server answers')
+    assert.match(r.out, /\[ok\] GBrain is running\./)
+    assert.match(r.out, /\[ok\] Hermes reaches GBrain/)
+    assert.equal(appConfig(w).gbrain, true)
+    assert.equal(appConfig(w).ownerName, 'Test Owner', 'other keys kept')
+    assert.match(r.out, /^ {2}Stage 7, Memory \(GBrain\): done$/m)
+  } finally {
+    killServers(w)
+  }
+})
+
+test('whole run twice on the same folders: the second run skips what is done (no second init or token)', FULL, async () => {
+  const w = world()
+  const port = await freePort()
+  const env = { GBRAIN_EXE: w.gbrain, VENOM_SETUP_GBRAIN_PORT: String(port) }
+  const keepTeam = STARTER_AGENTS.map((a) => [Q.agent(a, 'keep'), ''])
+  try {
+    const first = await drive(w, {
+      answers: [...claudeStart, ...TEAM, ...afterApp, [Q_SKILLS, ''], [Q_GBRAIN.install, '']],
+      picks: ['anthropic/test-claude-model'],
+      env,
+    })
+    assert.equal(first.code, 0, first.out)
+    const second = await drive(w, {
+      answers: [...claudeStart, [Q.update('boss'), 'y'], ...keepTeam, ...afterApp, [Q_SKILLS, '']],
+      picks: ['anthropic/test-claude-model'],
+      env,
+    })
+    assert.equal(second.code, 0, second.out)
+    assert.doesNotMatch(transcript(w, second.events), TOKEN_ON_SCREEN)
+    const g = gbrainCalls(w)
+    assert.equal(g.filter((a) => a[0] === 'init').length, 1, 'init once')
+    assert.equal(g.filter((a) => a[0] === 'auth' && a[1] === 'create').length, 2, 'two tokens, both from the first run')
+    assert.match(second.out, /\[ok\] Long-term memory \(GBrain\) is already set up and running\./)
+    assert.match(second.out, /\[ok\] Every skill was already there; nothing was copied\./)
+    assert.match(second.out, /^ {2}Stage 6, Skills: already done$/m)
+    assert.match(second.out, /^ {2}Stage 7, Memory \(GBrain\): already done$/m)
+    assert.match(second.out, /^ {2}Stage 2, Hermes: already done/m)
+    assert.equal(appConfig(w).gbrain, true)
+  } finally {
+    killServers(w)
+  }
+})
+
+test('no to memory: gbrain false, exit 0, GBrain never run', FULL, async () => {
+  const w = world()
+  const r = await drive(w, {
+    answers: [...claudeStart, ...TEAM, ...afterApp, [Q_SKILLS, ''], [Q_GBRAIN.install, 'n']],
+    picks: ['anthropic/test-claude-model'],
+    env: { GBRAIN_EXE: w.gbrain },
+  })
+  assert.equal(r.code, 0, r.out)
+  assert.equal(appConfig(w).gbrain, false)
+  assert.ok(gbrainCalls(w).every((a) => a[0] === '--version'), 'no gbrain invocation except --version')
+  assert.match(r.out, /^ {2}Stage 7, Memory \(GBrain\): declined/m)
+})
+
+test('no to skills: nothing copied, the run still reaches stage 7', FULL, async () => {
+  const w = world()
+  const r = await drive(w, { answers: [...claudeStart, ...TEAM, ...claudeRest], picks: ['anthropic/test-claude-model'] })
+  assert.equal(r.code, 0, r.out)
+  for (const p of ['boss', ...SPECIALISTS]) assert.deepEqual(skillFiles(w, p), [], `nothing copied into ${p}`)
+  assert.ok(r.out.includes(stageTitle(7)))
+  assert.match(r.out, /^ {2}Stage 6, Skills: declined$/m)
+})
+
+test('Bun and GBrain missing, Bun install declined: exit 0, memory off', FULL, async () => {
+  const w = world()
+  const r = await drive(w, {
+    answers: [...claudeStart, ...TEAM, ...afterApp, [Q_SKILLS, 'n'], [Q_GBRAIN.install, ''], [Q_GBRAIN.bun, 'n']],
+    picks: ['anthropic/test-claude-model'],
+  })
+  assert.equal(r.code, 0, r.out)
+  assert.match(r.out, /\[optional\] GBrain \(long-term memory\) is not installed\. Setup offers it later; it needs Bun/)
+  assert.equal(appConfig(w).gbrain, false)
+  assert.deepEqual(gbrainCalls(w), [])
+  assert.ok(!r.runs.some((x) => x.detached), 'no server started')
+})
+
 // ------------------------------------------------------------- the team question
 
-const claudeRest = [[/^Use a cheaper model/, ''], [Q.fallback, ''], [Q.appModel, '']]
-const claudeStart = [[Q.brain, '2'], [Q.access, '1'], [Q.supervisor, 'boss']]
 const profilesMade = (w) => Object.keys(JSON.parse(readFileSync(join(w.state, 'state.json'), 'utf8')).profiles ?? {}).sort()
 
 test('team: only Writer chosen, plus Claude Code (installed): one specialist, roster of two, link test on writer', FULL, async () => {
@@ -562,6 +750,8 @@ test('npm run setup -- --check reports the team list and stays read-only', () =>
     return r.stdout
   }
   assert.match(check(join(fixtures, 'one.json')), /Team: .*one\.json lists 1 agent\./)
+  const tools = check(join(fixtures, 'one.json'))
+  for (const name of ['Git', 'Bun', 'GBrain']) assert.match(tools, new RegExp(`\\] ${name} (found|not found)`), `${name} line`)
   assert.match(check(join(fixtures, 'five.json')), /Team: .*five\.json lists 5 agents\./)
   assert.match(check(join(home, 'none.json')), /Team: no team list at .*none\.json yet, so the four starter agents are used\./)
   const bad = check(join(fixtures, 'invalid-bad-id.json'))

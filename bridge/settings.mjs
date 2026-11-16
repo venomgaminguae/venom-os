@@ -57,3 +57,33 @@ export function loadAppModel({
   const config = readConfig(readFile, file, warn)
   return cleanModelId(config.appModel, { warn, source: `appModel in ${file}` })
 }
+
+/**
+ * The long-term memory choice: GBrain (a memory server on this PC, see
+ * bridge/gbrain.mjs) is used when VENOM_GBRAIN=1. That variable can come from
+ *
+ *   1. the environment: VENOM_GBRAIN, any value at all (also '' and '0'),
+ *      decides alone and the file is not read: returns 'env';
+ *   2. venom.config.json: { "gbrain": true } (exactly the boolean true;
+ *      `npm run setup` writes it) sets env.VENOM_GBRAIN = '1': returns 'config';
+ *   3. nothing: GBrain stays off (Honcho or no long-term memory): returns 'off'.
+ *
+ * Call it once at start-up, before anything reads VENOM_GBRAIN.
+ */
+export function applyMemorySetting({
+  env = process.env,
+  readFile = (p) => readFileSync(p, 'utf8'),
+  file = SETTINGS_FILE,
+  warn = () => {},
+} = {}) {
+  if (env.VENOM_GBRAIN !== undefined) return 'env'
+  // A `node --test` run never follows the person's own venom.config.json:
+  // a test that wants GBrain says so with VENOM_GBRAIN itself.
+  if (env.NODE_TEST_CONTEXT) return 'off'
+  const config = readConfig(readFile, file, warn)
+  if (config.gbrain === true) {
+    env.VENOM_GBRAIN = '1'
+    return 'config'
+  }
+  return 'off'
+}
